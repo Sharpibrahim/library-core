@@ -1,0 +1,252 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile information and preferences.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth unique ID" },
+        "username": { "type": "string" },
+        "fullName": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "teacher", "student"] },
+        "class": { "type": "string" },
+        "favoriteSubjects": { "type": "array", "items": { "type": "string" } },
+        "email": { "type": "string" },
+        "avatarUrl": { "type": "string" },
+        "bio": { "type": "string" },
+        "school": { "type": "string" },
+        "contactCode": { "type": "string" }
+      },
+      "required": ["uid", "username", "fullName", "role"]
+    },
+    "Course": {
+      "title": "Course",
+      "description": "Educational course or program.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "teacherId": { "type": "string" },
+        "teacherName": { "type": "string" },
+        "subject": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "lessons": { "type": "array", "items": { "type": "object" } },
+        "coverUrl": { "type": "string" },
+        "introVideo": { "type": "string" }
+      },
+      "required": ["title", "teacherId", "subject"]
+    },
+    "Conversation": {
+      "title": "Conversation",
+      "description": "Direct message thread between two users.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "participants": { "type": "array", "items": { "type": "string" }, "description": "UIDs of participants" },
+        "lastMessage": { "type": "string" },
+        "lastMessageTimestamp": { "type": "object", "description": "Server timestamp" },
+        "lastMessageSenderId": { "type": "string" }
+      },
+      "required": ["participants"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "Individual message in a conversation.",
+      "type": "object",
+      "properties": {
+        "senderId": { "type": "string" },
+        "senderName": { "type": "string" },
+        "content": { "type": "string" },
+        "timestamp": { "type": "object" },
+        "type": { "type": "string", "enum": ["text", "file"] }
+      },
+      "required": ["senderId", "content", "timestamp"]
+    },
+    "Resource": {
+      "title": "Resource",
+      "description": "Educational resource (PDF, link, etc.) in the library.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "author": { "type": "string" },
+        "type": { "type": "string" },
+        "description": { "type": "string" },
+        "fileUrl": { "type": "string" },
+        "coverUrl": { "type": "string" },
+        "status": { "type": "string", "enum": ["available", "borrowed"] },
+        "genre": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "author", "type", "createdAt"]
+    },
+    "Annotation": {
+      "title": "Annotation",
+      "description": "Note or highlight on a library resource.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "resourceId": { "type": "string" },
+        "userId": { "type": "string" },
+        "page": { "type": "number" },
+        "text": { "type": "string" },
+        "type": { "type": "string", "enum": ["highlight", "note"] },
+        "comment": { "type": "string" },
+        "timestamp": { "type": "number" }
+      },
+      "required": ["resourceId", "userId", "page", "type", "timestamp"]
+    },
+    "Bookmark": {
+      "title": "Bookmark",
+      "description": "Saved page in a resource.",
+      "type": "object",
+      "properties": {
+        "resourceId": { "type": "string" },
+        "userId": { "type": "string" },
+        "pages": { "type": "array", "items": { "type": "number" } }
+      },
+      "required": ["resourceId", "userId", "pages"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "User notification alert.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "type": { "type": "string", "enum": ["info", "success", "warning", "error"] },
+        "read": { "type": "boolean" },
+        "createdAt": { "type": "object" },
+        "link": { "type": "string" }
+      },
+      "required": ["userId", "title", "message", "type", "read", "createdAt"]
+    },
+    "Quiz": {
+      "title": "Quiz",
+      "description": "A quiz generated from a library resource.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "resourceId": { "type": "string" },
+        "title": { "type": "string" },
+        "creatorId": { "type": "string" },
+        "questions": { 
+          "type": "array", 
+          "items": { 
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "question": { "type": "string" },
+              "options": { "type": "array", "items": { "type": "string" } },
+              "correctAnswer": { "type": "number", "description": "Index of the correct option" },
+              "explanation": { "type": "string" }
+            }
+          }
+        },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["resourceId", "title", "questions"]
+    },
+    "QuizAttempt": {
+      "title": "QuizAttempt",
+      "description": "A user's attempt at a quiz.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "quizId": { "type": "string" },
+        "userId": { "type": "string" },
+        "score": { "type": "number" },
+        "totalQuestions": { "type": "number" },
+        "answers": { "type": "array", "items": { "type": "number" } },
+        "timestamp": { "type": "string" }
+      },
+      "required": ["quizId", "userId", "score", "totalQuestions", "timestamp"]
+    },
+    "StudySet": {
+      "title": "StudySet",
+      "description": "A collection of library resources for organized study.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "subject": { "type": "string" },
+        "resourceIds": { "type": "array", "items": { "type": "string" } },
+        "creatorId": { "type": "string" },
+        "creatorName": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "isPublic": { "type": "boolean" },
+        "color": { "type": "string" }
+      },
+      "required": ["title", "resourceIds", "creatorId"]
+    },
+    "ReadingProgress": {
+      "title": "ReadingProgress",
+      "description": "User's reading progress per resource.",
+      "type": "object",
+      "properties": {
+        "resourceId": { "type": "string" },
+        "lastPage": { "type": "number" },
+        "totalPages": { "type": "number" },
+        "updatedAt": { "type": "string" },
+        "title": { "type": "string" },
+        "coverUrl": { "type": "string" },
+        "author": { "type": "string" }
+      },
+      "required": ["resourceId", "lastPage", "totalPages", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": "User",
+      "description": "User profile data."
+    },
+    "resources/{resourceId}": {
+      "schema": "Resource",
+      "description": "Library resources."
+    },
+    "study_sets/{setId}": {
+      "schema": "StudySet",
+      "description": "Curated collections of resources."
+    },
+    "quizzes/{quizId}": {
+      "schema": "Quiz",
+      "description": "Generated quizzes."
+    },
+    "quiz_attempts/{attemptId}": {
+      "schema": "QuizAttempt",
+      "description": "User quiz attempts."
+    },
+    "notifications/{notificationId}": {
+      "schema": "Notification",
+      "description": "User notifications."
+    },
+    "users/{userId}/annotations/{annotationId}": {
+      "schema": "Annotation",
+      "description": "User's highlights and notes for resources."
+    },
+    "users/{userId}/bookmarks/{bookmarkId}": {
+      "schema": "Bookmark",
+      "description": "User's bookmarks for resources (indexed by resourceId)."
+    },
+    "users/{userId}/progress/{progressId}": {
+      "schema": "ReadingProgress",
+      "description": "User's reading progress on a specific library resource."
+    },
+    "courses/{courseId}": {
+      "schema": "Course",
+      "description": "Educational courses."
+    },
+    "conversations/{conversationId}": {
+      "schema": "Conversation",
+      "description": "Direct message conversations."
+    },
+    "conversations/{conversationId}/messages/{messageId}": {
+      "schema": "Message",
+      "description": "Messages within a conversation."
+    }
+  }
+}

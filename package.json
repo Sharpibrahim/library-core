@@ -1,0 +1,62 @@
+{
+  "name": "library-core",
+  "private": true,
+  "version": "1.0.0",
+  "description": "LibraryCore - Advanced Academic Library Excellence",
+  "author": "Scholar Developer",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx server.ts",
+    "build": "vite build",
+    "build:server": "esbuild server.ts --bundle --platform=node --target=node22 --format=esm --outfile=dist-server/server.js --external:better-sqlite3 --external:fsevents --external:onnxruntime-node",
+    "start": "tsx server.ts",
+    "lint": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@google-cloud/firestore": "^8.5.0",
+    "@google-cloud/storage": "^7.19.0",
+    "@google/genai": "^1.50.1",
+    "@google/generative-ai": "^0.21.0",
+    "@tailwindcss/vite": "^4.0.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "@xenova/transformers": "^2.17.2",
+    "better-sqlite3": "^11.3.0",
+    "clsx": "^2.1.1",
+    "cors": "^2.8.6",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.2",
+    "firebase": "^12.12.0",
+    "lucide-react": "^0.475.0",
+    "motion": "^11.11.17",
+    "multer": "^1.4.5-lts.1",
+    "pdf-parse": "^1.1.1",
+    "pdfjs-dist": "^5.4.296",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-intersection-observer": "^10.0.3",
+    "react-markdown": "^10.1.0",
+    "react-pdf": "^10.4.1",
+    "recharts": "^3.8.1",
+    "remark-gfm": "^4.0.1",
+    "tailwind-merge": "^2.5.4",
+    "tsx": "^4.19.2",
+    "typescript": "~5.6.3",
+    "vite": "^6.0.0",
+    "vite-plugin-pwa": "^1.2.0",
+    "workbox-window": "^7.4.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.11",
+    "@types/express": "^4.17.21",
+    "@types/multer": "^1.4.12",
+    "@types/node": "^22.10.1",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "autoprefixer": "^10.4.20",
+    "esbuild": "^0.28.0",
+    "tailwindcss": "^4.0.0"
+  },
+  "engines": {
+    "node": ">=22.6.0"
+  }
+}

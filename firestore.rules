@@ -1,0 +1,186 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // DEFAULT DENY CATCH-ALL
+    // ===============================================================
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // ===============================================================
+    // PRIMITIVES & HELPERS
+    // ===============================================================
+    function isSignedIn() { return request.auth != null; }
+    function isEmailVerified() { return isSignedIn() && ('email_verified' in request.auth.token) && request.auth.token.email_verified == true; }
+    // Admin and Owner helpers
+    function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
+    function isSuperAdmin() { return isSignedIn() && ('email' in request.auth.token) && (request.auth.token.email == "sharpibrah@gmail.com" || request.auth.token.email == "sharpibrah+google@gmail.com"); }
+    
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    
+    function isValidId(id) { 
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); 
+    }
+    
+    function isAdmin() {
+      return isSignedIn() && (
+        isSuperAdmin() ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+      );
+    }
+
+    function isTeacher() {
+      return isSignedIn() && (
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'teacher') ||
+        isAdmin()
+      );
+    }
+
+    // ===============================================================
+    // VALIDATION BLUEPRINTS
+    // ===============================================================
+    
+    function isValidUser(data) {
+      return data.uid is string &&
+             data.username is string &&
+             data.fullName is string &&
+             data.role in ['admin', 'teacher', 'student'];
+    }
+
+    function isValidCourse(data) {
+      return data.keys().hasAll(['title', 'teacherId', 'subject']) &&
+             data.title is string && data.title.size() <= 200 &&
+             data.teacherId is string &&
+             data.subject is string && data.subject.size() <= 50;
+    }
+
+    function isValidConversation(data) {
+      return data.keys().hasAll(['participants']) &&
+             data.participants is list &&
+             data.participants.size() == 2 &&
+             data.participants[0] is string && data.participants[1] is string;
+    }
+
+    function isValidMessage(data) {
+      return data.keys().hasAll(['senderId', 'content', 'timestamp']) &&
+             data.senderId == request.auth.uid &&
+             data.content is string && data.content.size() <= 5000;
+    }
+
+    function isValidNotification(data) {
+      return data.keys().hasAll(['userId', 'title', 'message', 'type', 'read', 'createdAt']) &&
+             data.userId == request.auth.uid &&
+             data.title is string && data.title.size() <= 200 &&
+             data.message is string && data.message.size() <= 1000 &&
+             data.type in ['info', 'success', 'warning', 'error'] &&
+             data.read is bool;
+    }
+
+    // ===============================================================
+    // RESOURCE RULES
+    // ===============================================================
+
+    match /users/{userId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
+
+      // Only the owner email can create an admin profile initially
+      allow create: if isOwner(userId) && isValidUser(incoming()) && (
+        (incoming().role == 'student') || 
+        (incoming().role == 'admin' && isSuperAdmin()) ||
+        (incoming().role == 'teacher' && isAdmin())
+      );
+      
+      allow update: if (isOwner(userId) || isAdmin()) && (
+        // Action: Self Update Profile (Cannot change role)
+        (isOwner(userId) && incoming().role == existing().role && incoming().diff(existing()).affectedKeys().hasOnly(['username', 'fullName', 'avatarUrl', 'bio', 'school', 'favoriteSubjects', 'class', 'contactCode', 'email'])) ||
+        // Admin update: can change roles but only superAdmin can make someone an admin
+        (isAdmin() && (incoming().role != 'admin' || isSuperAdmin()))
+      );
+      
+      allow delete: if isAdmin() && userId != request.auth.uid;
+
+      match /chatMessages/{messageId} {
+        allow read, write: if isSignedIn() && request.auth.uid == userId;
+      }
+
+      match /annotations/{annotationId} {
+        allow read, write: if isSignedIn() && request.auth.uid == userId;
+      }
+
+      match /bookmarks/{bookmarkId} {
+        allow read, write: if isSignedIn() && request.auth.uid == userId;
+      }
+
+      match /progress/{progressId} {
+        allow read, write: if isSignedIn() && request.auth.uid == userId;
+      }
+    }
+
+    match /resources/{resourceId} {
+      allow get, list: if isSignedIn();
+      allow create: if isAdmin() || isTeacher();
+      allow update: if isAdmin() || isTeacher() || (isSignedIn() && existing().uploadedBy == request.auth.uid);
+      allow delete: if isAdmin() || (isSignedIn() && existing().uploadedBy == request.auth.uid);
+    }
+
+    match /study_sets/{setId} {
+      allow get, list: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update, delete: if isAdmin() || (isSignedIn() && existing().creatorId == request.auth.uid);
+    }
+
+    match /courses/{courseId} {
+      allow get, list: if isSignedIn();
+      allow create, update: if isAdmin() || isTeacher();
+      allow delete: if isAdmin();
+    }
+
+    match /notifications/{notificationId} {
+      allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && incoming().userId == request.auth.uid && isValidNotification(incoming());
+      allow update: if isSignedIn() && existing().userId == request.auth.uid && isValidNotification(incoming()) && (
+        incoming().diff(existing()).affectedKeys().hasOnly(['read'])
+      );
+      allow delete: if isSignedIn() && existing().userId == request.auth.uid;
+    }
+
+    match /quizzes/{quizId} {
+      allow get, list: if isSignedIn();
+      allow write: if isAdmin() || isTeacher();
+    }
+
+    match /conversations/{conversationId} {
+      function isMember() { return isSignedIn() && (request.auth.uid in resource.data.participants); }
+      function willBeMember() { return isSignedIn() && (request.auth.uid in incoming().participants); }
+
+      allow get: if isMember();
+      allow list: if isSignedIn() && (request.auth.uid in resource.data.participants);
+      
+      allow create: if willBeMember() && isValidConversation(incoming());
+      allow update: if isMember() && incoming().participants == existing().participants && (
+        incoming().diff(existing()).affectedKeys().hasOnly(['lastMessage', 'lastMessageTimestamp', 'lastMessageSenderId'])
+      );
+
+      match /messages/{messageId} {
+        // DERIVED ACCESS PATTERN
+        function conversationData() {
+          return get(/databases/$(database)/documents/conversations/$(conversationId)).data;
+        }
+        
+        allow get, list: if isSignedIn() && (request.auth.uid in conversationData().participants);
+        allow create: if isSignedIn() && (request.auth.uid in conversationData().participants) && isValidMessage(incoming());
+      }
+    }
+
+    match /activityLog/{logId} {
+      allow get, list: if isSignedIn();
+      allow create: if isSignedIn() && incoming().userId == request.auth.uid;
+    }
+  }
+}

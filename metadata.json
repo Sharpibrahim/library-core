@@ -1,0 +1,6 @@
+{
+  "name": "LibraryCore",
+  "description": "Advanced academic library management system with AI-powered study tools, voice control, and modern PDF reader.",
+  "requestFramePermissions": ["camera", "microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

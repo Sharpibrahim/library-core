@@ -1,0 +1,170 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,700;1,700&family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #8B5CF6; /* Primary Accent Purple */
+  --color-primary-hover: #7C3AED;
+  --color-secondary: #3B82F6; /* Secondary Accent Blue */
+  --color-secondary-hover: #2563EB;
+  
+  --color-background: #F8FAFC; /* Main Background (Off-white) */
+  --color-section: #F1F5F9;    /* Section Background */
+  --color-surface: #FFFFFF;    /* Card Background (White) */
+  --color-hover: #F8FAFC;      /* Hover Background */
+  
+  --color-text-main: #1E293B;  /* Primary Text (Dark Slate) */
+  --color-text-secondary: #64748B; /* Secondary Text (Gray) */
+  --color-text-muted: #94A3B8;
+  
+  --color-border: #E2E8F0; /* Light Gray Border */
+  --color-divider: #F1F5F9;
+  
+  --color-hl-yellow: #FEF3C7;
+  --color-hl-blue: #DBEAFE;
+  --color-hl-purple: #EDE9FE;
+  
+  --color-success: #10B981; /* Green */
+  --color-warning: #F59E0B; /* Amber */
+  --color-error: #EF4444;   /* Red */
+  --color-info: #3B82F6; 
+
+  --color-dark-background: #0F172A;
+  --color-dark-surface: #1E293B;
+  --color-dark-text: #F8FAFC;
+  --color-dark-border: #334155;
+
+  --font-serif: "Playfair Display", serif;
+  --font-sans: "Inter", "Outfit", sans-serif;
+  --font-display: "Outfit", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+  
+  --shadow-default: 0 6px 18px rgba(15, 23, 42, 0.06);
+  --shadow-hover: 0 12px 24px rgba(15, 23, 42, 0.1);
+}
+
+@layer utilities {
+  .bg-primary-gradient {
+    @apply bg-gradient-to-br from-[#8B5CF6] to-[#3B82F6];
+  }
+  .bg-secondary-gradient {
+    @apply bg-gradient-to-br from-[#6D28D9] to-[#2563EB];
+  }
+  .border-primary-glow {
+    @apply border-primary/30 shadow-[0_0_15px_rgba(139,92,246,0.1)];
+  }
+}
+
+@layer base {
+  body {
+    @apply bg-background text-text-main antialiased selection:bg-primary/20 selection:text-primary transition-colors duration-300;
+  }
+
+  .dark body {
+    @apply bg-dark-background text-dark-text;
+  }
+
+  /* Basic Markdown Formatting */
+  .prose {
+    @apply text-text-main leading-relaxed;
+  }
+  .prose p {
+    @apply mb-4 last:mb-0;
+  }
+  .prose h1, .prose h2, .prose h3 {
+    @apply font-display font-bold text-text-main mt-6 mb-3;
+  }
+  .prose ul, .prose ol {
+    @apply ml-4 mb-4 list-outside;
+  }
+  .prose ul {
+    @apply list-disc;
+  }
+  .prose ol {
+    @apply list-decimal;
+  }
+  .prose li {
+    @apply mb-1;
+  }
+  .prose code {
+    @apply font-mono bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-sm;
+  }
+  .prose pre {
+    @apply bg-slate-900 text-slate-100 p-4 rounded-xl overflow-x-auto my-4 font-mono text-sm border border-white/10;
+  }
+  .prose table {
+    @apply w-full border-collapse my-4;
+  }
+  .prose th, .prose td {
+    @apply border border-border p-2 text-left;
+  }
+  .prose th {
+    @apply bg-slate-50 dark:bg-slate-800 font-bold;
+  }
+}
+
+.glass-panel {
+  @apply bg-surface/80 backdrop-blur-xl border border-border shadow-[0_6px_18px_rgba(15,23,42,0.06)] transition-all duration-300;
+}
+
+.dark .glass-panel {
+  @apply bg-dark-surface/80 border-dark-border shadow-2xl;
+}
+
+.glass-card {
+  @apply bg-surface border border-border rounded-2xl transition-all duration-300 shadow-[0_6px_18px_rgba(15,23,42,0.06)];
+}
+
+.dark .glass-card {
+  @apply bg-dark-surface border-dark-border shadow-none;
+}
+
+.glass-card-hover {
+  @apply hover:shadow-[0_12px_24px_rgba(15,23,42,0.1)] hover:-translate-y-1;
+}
+
+.btn-primary {
+  @apply bg-primary text-white font-bold rounded-xl shadow-lg shadow-primary/20 hover:bg-primary-hover hover:scale-[1.02] active:scale-[0.98] transition-all duration-300;
+}
+
+.btn-secondary {
+  @apply bg-section text-text-secondary font-bold rounded-xl hover:bg-hover transition-all duration-300;
+}
+
+.btn-accent {
+  @apply bg-secondary text-white font-bold rounded-xl shadow-lg shadow-secondary/20 hover:bg-secondary-hover hover:scale-[1.02] active:scale-[0.98] transition-all duration-300;
+}
+
+.gradient-text {
+  @apply bg-clip-text text-transparent bg-gradient-to-r from-primary to-secondary;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  @apply bg-transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  @apply bg-slate-200 dark:bg-slate-800 rounded-full;
+}
+
+.animate-glow {
+  animation: glow 4s ease-in-out infinite;
+}
+
+@keyframes glow {
+  0%, 100% { opacity: 0.8; filter: blur(20px); }
+  50% { opacity: 1; filter: blur(30px); }
+}
+
+.italic-serif {
+  @apply font-serif italic;
+}
+
+/* Force bright white background on all dropdown lists and options */
+select, option {
+  background-color: #ffffff !important;
+  color: #1e293b !important;
+}
