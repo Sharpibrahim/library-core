@@ -327,8 +327,8 @@ export function ExpertChatView({ user }: ExpertChatViewProps) {
   };
 
   const findContactByCode = async () => {
-    if (searchCode.trim().length === 0) {
-      setSearchError('Please enter a search code, username, or email');
+    if (searchCode.length !== 5) {
+      setSearchError('Code must be exactly 5 digits');
       return;
     }
 
@@ -336,30 +336,11 @@ export function ExpertChatView({ user }: ExpertChatViewProps) {
     setSearchError('');
 
     try {
-      let foundDoc: any = null;
-
-      // 1. First, search by contactCode as a string
-      const qStr = query(collection(db, 'users'), where('contactCode', '==', searchCode));
-      let querySnapshot = await getDocs(qStr);
-
-      if (querySnapshot.empty && !isNaN(Number(searchCode))) {
-        // 2. Try as a number
-        const qNum = query(collection(db, 'users'), where('contactCode', '==', Number(searchCode)));
-        querySnapshot = await getDocs(qNum);
-      }
-
-      // 3. Fallback: if still empty, search by username or email as a modern fallback
-      if (querySnapshot.empty) {
-        const qUser = query(collection(db, 'users'), where('username', '==', searchCode));
-        querySnapshot = await getDocs(qUser);
-      }
-      if (querySnapshot.empty) {
-        const qEmail = query(collection(db, 'users'), where('email', '==', searchCode));
-        querySnapshot = await getDocs(qEmail);
-      }
+      const q = query(collection(db, 'users'), where('contactCode', '==', searchCode));
+      const querySnapshot = await getDocs(q);
 
       if (querySnapshot.empty) {
-        setSearchError('No user found with the entered code, email, or username.');
+        setSearchError('No user found with this code.');
       } else {
         const foundUser = querySnapshot.docs[0].data() as User;
         
@@ -385,9 +366,8 @@ export function ExpertChatView({ user }: ExpertChatViewProps) {
           }
         }
       }
-    } catch (err: any) {
-      console.error('Contact search failed:', err);
-      setSearchError(`Search error: ${err.message || 'Check firestore permissions.'}`);
+    } catch (err) {
+      setSearchError('An error occurred during search.');
     } finally {
       setIsSearching(false);
     }

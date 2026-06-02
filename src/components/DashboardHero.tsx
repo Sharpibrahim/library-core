@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { BookOpen, FileText, PenTool, GraduationCap } from 'lucide-react';
 import { motion } from 'motion/react';
 import { User } from '../types';
-import { auth, db } from '../firebase';
+import { db } from '../firebase';
 import { collection, onSnapshot } from 'firebase/firestore';
 
 interface DashboardHeroProps {
@@ -18,34 +18,6 @@ export function DashboardHero({ user }: DashboardHeroProps) {
   });
 
   useEffect(() => {
-    if (!auth.currentUser) {
-      // Fetch resources fallback
-      fetch('/api/resources')
-        .then(res => res.ok ? res.json() : [])
-        .then(docs => {
-          setStatsData(prev => ({
-            ...prev,
-            books: docs.filter((d: any) => d.type === 'book').length,
-            pastpapers: docs.filter((d: any) => d.type === 'past_paper').length,
-            notes: docs.filter((d: any) => d.type === 'note').length,
-          }));
-        })
-        .catch(err => console.warn('Failed to get offline resources for DashboardHero:', err));
-
-      // Fetch courses fallback
-      fetch('/api/courses')
-        .then(res => res.ok ? res.json() : [])
-        .then(docs => {
-          setStatsData(prev => ({
-            ...prev,
-            courses: docs.length
-          }));
-        })
-        .catch(err => console.warn('Failed to get offline courses for DashboardHero:', err));
-
-      return;
-    }
-
     // Listen to resources to calculate stats
     const unsubResources = onSnapshot(collection(db, 'resources'), (snapshot) => {
       const docs = snapshot.docs.map(doc => doc.data());
@@ -56,7 +28,7 @@ export function DashboardHero({ user }: DashboardHeroProps) {
         notes: docs.filter(d => d.type === 'note').length,
       }));
     }, (error) => {
-      console.warn('Blocked snapshot of resources in DashboardHero:', error.message);
+      console.error('Failed to snapshot resources in DashboardHero:', error);
     });
 
     // Listen to courses
@@ -66,7 +38,7 @@ export function DashboardHero({ user }: DashboardHeroProps) {
         courses: snapshot.size
       }));
     }, (error) => {
-      console.warn('Blocked snapshot of courses in DashboardHero:', error.message);
+      console.error('Failed to snapshot courses in DashboardHero:', error);
     });
 
     return () => {

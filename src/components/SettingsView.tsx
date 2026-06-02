@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import { 
   User, 
   Palette, 
@@ -76,10 +76,6 @@ export function SettingsView({ user, theme, onThemeChange, onUserUpdate }: Setti
 
   // Local state for profile edits
   const [editedUser, setEditedUser] = useState<UserType>({ ...user });
-
-  useEffect(() => {
-    setEditedUser({ ...user });
-  }, [user]);
   
   // UI Preferences (Local)
   const [uiSize, setUiSize] = useState('medium');
@@ -87,71 +83,32 @@ export function SettingsView({ user, theme, onThemeChange, onUserUpdate }: Setti
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       if (file.size > 3 * 1024 * 1024) {
         alert('File is too large. Please select an image under 3MB.');
         return;
       }
-      
-      setIsSaving(true);
-      setSaveStatus('idle');
-
-      try {
-        const formData = new FormData();
-        formData.append('file', file);
-
-        const response = await fetch('/api/upload', {
-          method: 'POST',
-          body: formData,
-        });
-
-        if (!response.ok) {
-          throw new Error('Avatar upload to server failed');
-        }
-
-        const data = await response.json();
-        const fileUrl = data.url; // /uploads/filename
-
-        // Update Firestore
-        const userRef = doc(db, 'users', user.uid);
-        await updateDoc(userRef, {
-          avatarUrl: fileUrl
-        });
-
-        const newUserData = { ...user, ...editedUser, avatarUrl: fileUrl };
-        setEditedUser(newUserData);
-        onUserUpdate(newUserData);
-
-        setSaveStatus('success');
-        setTimeout(() => setSaveStatus('idle'), 3000);
-      } catch (err: any) {
-        console.warn("Express avatar upload failed. Attempting offline Base64 fallback...", err);
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        const base64Data = event.target?.result as string;
+        setEditedUser(prev => ({ ...prev, avatarUrl: base64Data }));
         
-        // Fallback to local Base64 reading if offline or server fails
-        const reader = new FileReader();
-        reader.onload = async (event) => {
-          const base64Data = event.target?.result as string;
-          setEditedUser(prev => ({ ...prev, avatarUrl: base64Data }));
-          try {
-            const userRef = doc(db, 'users', user.uid);
-            await updateDoc(userRef, {
-              avatarUrl: base64Data
-            });
-            const newUserData = { ...user, ...editedUser, avatarUrl: base64Data };
-            onUserUpdate(newUserData);
-            setSaveStatus('success');
-            setTimeout(() => setSaveStatus('idle'), 3000);
-          } catch (docErr) {
-            console.error("Offline base64 update fallback failed:", docErr);
-            setSaveStatus('error');
-          }
-        };
-        reader.readAsDataURL(file);
-      } finally {
-        setIsSaving(false);
-      }
+        try {
+          const userRef = doc(db, 'users', user.uid);
+          await updateDoc(userRef, {
+            avatarUrl: base64Data
+          });
+          onUserUpdate({ ...editedUser, avatarUrl: base64Data });
+          setSaveStatus('success');
+          setTimeout(() => setSaveStatus('idle'), 3000);
+        } catch (err) {
+          console.error("Failed to update avatar in real-time:", err);
+          setSaveStatus('error');
+        }
+      };
+      reader.readAsDataURL(file);
     }
   };
 
@@ -163,8 +120,7 @@ export function SettingsView({ user, theme, onThemeChange, onUserUpdate }: Setti
       await updateDoc(userRef, {
         fullName: editedUser.fullName,
         email: editedUser.email || '',
-        avatarUrl: editedUser.avatarUrl || (window as any).firebaseUser?.photoURL || '',
-        role: editedUser.role
+        avatarUrl: editedUser.avatarUrl || (window as any).firebaseUser?.photoURL || ''
       });
       onUserUpdate(editedUser);
       setSaveStatus('success');
@@ -241,18 +197,6 @@ export function SettingsView({ user, theme, onThemeChange, onUserUpdate }: Setti
                     onChange={e => setEditedUser({ ...editedUser, email: e.target.value })}
                     className="w-full px-4 py-3 bg-gray-50/50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-violet-600/20 focus:border-violet-600 focus:outline-none font-medium transition-all"
                   />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Academic Role</label>
-                  <select 
-                    value={editedUser.role || 'student'}
-                    onChange={e => setEditedUser({ ...editedUser, role: e.target.value as any })}
-                    className="w-full px-4 py-3 bg-gray-50/50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-violet-600/20 focus:border-violet-600 focus:outline-none font-medium transition-all"
-                  >
-                    <option value="student">Student / Scholar</option>
-                    <option value="teacher">Teacher / Academic Coach</option>
-                    <option value="admin">Administrator</option>
-                  </select>
                 </div>
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">New Password</label>

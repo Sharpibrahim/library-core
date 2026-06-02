@@ -5,7 +5,6 @@ import fs from "fs";
 import cors from "cors";
 import Database from "better-sqlite3";
 import { Storage } from '@google-cloud/storage';
-import admin from "firebase-admin";
 
 // Handle ESM/CJS compatibility for better-sqlite3
 const BetterSqlite3 = (Database as any).default || Database;
@@ -1368,75 +1367,54 @@ app.post('/api/ai/chat', async (req, res) => {
     const apiKey = process.env.GEMINI_API_KEY;
     const isKeyMissing = !apiKey || apiKey === 'MY_GEMINI_API_KEY' || apiKey.trim() === '';
 
-    // If Gemini key is missing and they aren't explicitly forcing offline search,
-    // return a beautiful, friendly instruction of how to add the key in Google AI Studio
-    if (isKeyMissing && !useOfflineSearch) {
-      return res.json({
-        reply: `### 💡 Gemini AI Assistant Ready\n\nTo begin chatting with the AI, please configure your **GEMINI_API_KEY** in the **Settings > Secrets** panel in the Google AI Studio menu:\n\n1. At the top-right of your AI Studio environment, click the **Settings** gear icon.\n2. Locate the **Secrets** section.\n3. Add a new secret with named key \`GEMINI_API_KEY\` and paste your Gemini API key.\n\nOnce added, you'll unlock real-time academic assistance, textbook summarization, course structure suggestions, and automated MCQ quiz generation instantly! \n\n*Note: If you have uploaded resources already, you can toggle 'Offline Search' in your assistant settings to try analyzing text using standard local templates.*`
-      });
-    }
-
     if (useOfflineSearch || isKeyMissing) {
-      try {
-        let resource: any = null;
-        if (resourceId) {
-          try {
-            resource = db.prepare('SELECT * FROM resources WHERE id = ?').get(resourceId);
-          } catch (e) {
-            console.error('[OFFLINE CHAT] Failed to look up resource id:', resourceId, e);
-          }
+      let resource: any = null;
+      if (resourceId) {
+        try {
+          resource = db.prepare('SELECT * FROM resources WHERE id = ?').get(resourceId);
+        } catch (e) {
+          console.error('[OFFLINE CHAT] Failed to look up resource id:', resourceId, e);
         }
+      }
 
-        if (resource && resource.file_url) {
-          const filePath = path.join(process.cwd(), resource.file_url.startsWith('/') ? resource.file_url.substring(1) : resource.file_url);
-          if (fs.existsSync(filePath)) {
-            console.log(`Performing local offline QA for specific document: ${resource.title}`);
-            const { getLocalAnswer } = await import("./localAi.ts");
-            const result = await getLocalAnswer(message, filePath);
-            let reply = result.answer;
-            if (isKeyMissing && !useOfflineSearch) {
-              reply = `(Note: Gemini API key is missing, falling back to local document analysis)\n\n${reply}`;
-            }
-            return res.json({
-              reply,
-              isOffline: true,
-              source: 'Local AI (Specific Document)'
-            });
+      if (resource && resource.file_url) {
+        const filePath = path.join(process.cwd(), resource.file_url.startsWith('/') ? resource.file_url.substring(1) : resource.file_url);
+        if (fs.existsSync(filePath)) {
+          console.log(`Performing local offline QA for specific document: ${resource.title}`);
+          const { getLocalAnswer } = await import("./localAi.ts");
+          const result = await getLocalAnswer(message, filePath);
+          let reply = result.answer;
+          if (isKeyMissing && !useOfflineSearch) {
+            reply = `(Note: Gemini API key is missing, falling back to local document analysis)\n\n${reply}`;
           }
-        }
-
-        const { searchLibrary } = await import("./localAi.ts");
-        const resources = db.prepare('SELECT title, file_url FROM resources WHERE file_url IS NOT NULL').all() as any[];
-        const docsToSearch = resources.map(r => ({
-          title: r.title,
-          filePath: path.join(process.cwd(), r.file_url.startsWith('/') ? r.file_url.substring(1) : r.file_url)
-        })).filter(doc => fs.existsSync(doc.filePath));
-
-        if (docsToSearch.length === 0) {
           return res.json({
-            reply: `No local documents/textbooks have been uploaded or found on the server to make offline search possible. Please upload a book/document via the Library view first, or configure your \`GEMINI_API_KEY\` in **Settings > Secrets** to chat in real-time immediately!`
+            reply,
+            isOffline: true,
+            source: 'Local AI (Specific Document)'
           });
         }
-
-        console.log(`Performing library-wide offline search (Fallback: ${isKeyMissing}) for: ${message}`);
-        const result = await searchLibrary(message, docsToSearch);
-        
-        let reply = result.answer;
-        if (isKeyMissing && !useOfflineSearch) {
-          reply = `(Note: Gemini API key is missing, falling back to offline library search)\n\n${reply}`;
-        }
-
-        return res.json({ 
-          reply,
-          isOffline: true,
-          source: result.source
-        });
-      } catch (localError: any) {
-        console.warn("Local offline QA fallback failed or memory limits exceeded:", localError);
-        return res.json({
-          reply: `### 💡 Gemini AI Assistant Ready\n\nTo begin chatting, please configure your **GEMINI_API_KEY** in the **Settings > Secrets** panel in the Google AI Studio menu. \n\n*(Note: The local offline fallback was bypassed due to missing model assets or server memory constraints, and requires an active API key to operate).*`
-        });
       }
+
+      const { searchLibrary } = await import("./localAi.ts");
+      const resources = db.prepare('SELECT title, file_url FROM resources WHERE file_url IS NOT NULL').all() as any[];
+      const docsToSearch = resources.map(r => ({
+        title: r.title,
+        filePath: path.join(process.cwd(), r.file_url.startsWith('/') ? r.file_url.substring(1) : r.file_url)
+      })).filter(doc => fs.existsSync(doc.filePath));
+
+      console.log(`Performing library-wide offline search (Fallback: ${isKeyMissing}) for: ${message}`);
+      const result = await searchLibrary(message, docsToSearch);
+      
+      let reply = result.answer;
+      if (isKeyMissing && !useOfflineSearch) {
+        reply = `(Note: Gemini API key is missing, falling back to offline library search)\n\n${reply}`;
+      }
+
+      return res.json({ 
+        reply,
+        isOffline: true,
+        source: result.source
+      });
     }
     
     let resource: any = null;
@@ -1502,42 +1480,8 @@ Provide a helpful and accurate answer about this resource inside the Library Cor
 app.post('/api/ai/generate-quiz', async (req, res) => {
   try {
     const { title, context, count = 5 } = req.body;
-    
-    const apiKey = process.env.GEMINI_API_KEY;
-    const isKeyMissing = !apiKey || apiKey === 'MY_GEMINI_API_KEY' || apiKey.trim() === '';
-
-    if (isKeyMissing) {
-      const fallbacks = [
-        {
-          question: `Which of the following is core to understanding "${title || 'this course'}"?`,
-          options: ["Active study recall and spaced repetition", "Passive rereading of materials", "Skipping lectures without practice", "None of the above"],
-          correctAnswer: 0
-        },
-        {
-          question: `What is the primarily recommended learning behavior in "${title || 'this topic'}"?`,
-          options: ["Cramming the night before", "Collaborating in peer groups & self-testing", "Memorizing details without context", "Avoiding practical assignments"],
-          correctAnswer: 1
-        },
-        {
-          question: `How can LibraryCore AI assist you in mastering "${title || 'this course'}"?`,
-          options: ["It cannot help with structured learning", "It can summarize material and build personalized quiz programs", "It does the assignments on your behalf", "It is only a storage container"],
-          correctAnswer: 1
-        },
-        {
-          question: "Which technique is most effective for long-term retention of lesson concepts?",
-          options: ["Highlighting every line of the chapter", "Spaced intervals of practice testing", "Listening to white noise while asleep", "Staring at the cover page for hours"],
-          correctAnswer: 1
-        },
-        {
-          question: "What is an indicator of successfully mastering a learning module?",
-          options: ["The ability to recall, teach, and apply concepts to distinct exercises", "Buying more notebooks", "Bragging about completing it quickly", "Closing the tab immediately"],
-          correctAnswer: 0
-        }
-      ];
-      return res.json(fallbacks.slice(0, count));
-    }
-
     const ai = getGenAI();
+    
     const prompt = `Create a ${count}-question multiple choice quiz for a lesson titled "${title}". ${context ? `Context: ${context}` : ''}
     Return the quiz as a JSON array of objects with this structure:
     {
@@ -1563,42 +1507,8 @@ app.post('/api/ai/generate-quiz', async (req, res) => {
 app.post('/api/ai/generate-exam', async (req, res) => {
   try {
     const { title, description } = req.body;
-    
-    const apiKey = process.env.GEMINI_API_KEY;
-    const isKeyMissing = !apiKey || apiKey === 'MY_GEMINI_API_KEY' || apiKey.trim() === '';
-
-    if (isKeyMissing) {
-      const fallbacks = [
-        {
-          question: `What is the primary objective of mastering the course "${title || 'this course'}"?`,
-          options: ["Consolidating fundamental terms and applying them to solve major problems", "Storing PDFs without ever reading them", "Finishing the syllabus as fast as possible without understanding", "Paying for additional course materials"],
-          correctAnswer: 0
-        },
-        {
-          question: "Which phase of study combines reading comprehension with critical assessment?",
-          options: ["Active recall testing and textbook synthesis", "Passive skimming before bedtime", "Relying purely on secondary guess sheets", "Skipping quizzes completely"],
-          correctAnswer: 0
-        },
-        {
-          question: "How does spacing study intervals affect long-term retention?",
-          options: ["It has no effect compared to cramming", "It significantly enhances memory recall and retrieval ease", "It reduces performance on key milestones", "It confuses the learner"],
-          correctAnswer: 1
-        },
-        {
-          question: "What is the recommended course of action when a quiz question is answered incorrectly?",
-          options: ["Ignoring the card completely", "Reviewing the specific lesson context and trying another testing model", "Blaming the platform linter", "Deleting the course record entirely"],
-          correctAnswer: 1
-        },
-        {
-          question: "What is the role of active peer collaboration in advanced study groups?",
-          options: ["It slows progress down", "It allows sharing insights, testing each other, and consolidating ideas", "It is prohibited under library terms", "It is only for beginners"],
-          correctAnswer: 1
-        }
-      ];
-      return res.json(fallbacks);
-    }
-
     const ai = getGenAI();
+    
     const prompt = `Create a comprehensive 10-question final exam for the course "${title}". Description: ${description}.
     Return the exam as a JSON array of objects with this structure:
     {
@@ -1624,14 +1534,6 @@ app.post('/api/ai/generate-exam', async (req, res) => {
 app.post('/api/ai/suggest-difficulty', async (req, res) => {
   try {
     const { title, description } = req.body;
-    
-    const apiKey = process.env.GEMINI_API_KEY;
-    const isKeyMissing = !apiKey || apiKey === 'MY_GEMINI_API_KEY' || apiKey.trim() === '';
-
-    if (isKeyMissing) {
-      return res.json({ level: 'Intermediate' });
-    }
-
     const ai = getGenAI();
     const prompt = `Based on this course title: "${title}" and description: "${description}", suggest a single word difficulty level (either "Beginner", "Intermediate", or "Advanced"). Return ONLY the word.`;
     const result = await ai.models.generateContent({
@@ -1729,26 +1631,11 @@ app.post('/api/classes', (req, res) => {
   try {
     const { name, subject, teacher_id, teacher_name } = req.body;
     
-    let finalTeacherId: number | null = null;
-    let finalTeacherUid: string | null = null;
-
+    // Server-side block for students
     if (teacher_id) {
-      // Find the user in SQLite to retrieve accurate details and role block
-      const userRow = db.prepare('SELECT id, role FROM users WHERE uid = ? OR username = ?').get(teacher_id, teacher_id) as any;
-      if (userRow) {
-        if (userRow.role === 'student') {
-          return res.status(403).json({ error: 'Access denied: Students are not permitted to create classrooms.' });
-        }
-        finalTeacherId = userRow.id;
-      }
-      
-      const parsedNum = Number(teacher_id);
-      if (!isNaN(parsedNum) && String(parsedNum) === String(teacher_id)) {
-        finalTeacherId = parsedNum;
-        const r = db.prepare('SELECT uid FROM users WHERE id = ?').get(parsedNum) as any;
-        if (r) finalTeacherUid = r.uid;
-      } else {
-        finalTeacherUid = String(teacher_id);
+      const userRow = db.prepare('SELECT role FROM users WHERE uid = ?').get(teacher_id) as any;
+      if (userRow && userRow.role === 'student') {
+        return res.status(403).json({ error: 'Access denied: Students are not permitted to create classrooms.' });
       }
     }
 
@@ -1758,14 +1645,17 @@ app.post('/api/classes', (req, res) => {
       code = generateClassCode();
     }
     
+    // We try to determine if teacher_id is an integer (local db) or string (firebase uid)
+    const isLocalId = !isNaN(Number(teacher_id)) && typeof teacher_id !== 'string';
+    
     const info = db.prepare(`
       INSERT INTO classes (name, subject, teacher_id, teacher_uid, teacher_name, class_code) 
       VALUES (?, ?, ?, ?, ?, ?)
     `).run(
       name, 
       subject, 
-      finalTeacherId, 
-      finalTeacherUid, 
+      isLocalId ? teacher_id : null, 
+      !isLocalId ? teacher_id : null, 
       teacher_name || '', 
       code
     );
@@ -2305,50 +2195,6 @@ async function startServer() {
       process.exit(0);
     });
   });
-
-  // Reconcile and provision the overall administrator account in Cloud Auth
-  try {
-    const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
-    if (fs.existsSync(configPath)) {
-      const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-      if (config.projectId) {
-        if (admin.apps.length === 0) {
-          admin.initializeApp({
-            credential: admin.credential.applicationDefault(),
-            projectId: config.projectId,
-          });
-        }
-        
-        const adminEmail = 'sharpibrah@gmail.com';
-        const adminPassword = 'SunnyDay@2026';
-        const adminDisplayName = 'Sharp White';
-
-        console.log(`[ADMIN-AUTH] Ensuring administrator user '${adminEmail}' exists in Cloud Authentication...`);
-        try {
-          const userRecord = await admin.auth().getUserByEmail(adminEmail);
-          await admin.auth().updateUser(userRecord.uid, {
-            password: adminPassword,
-            displayName: adminDisplayName,
-          });
-          console.log(`[ADMIN-AUTH] Successfully verified and aligned overall admin authentication details.`);
-        } catch (authErr: any) {
-          if (authErr.code === 'auth/user-not-found') {
-            const newUserRecord = await admin.auth().createUser({
-              email: adminEmail,
-              password: adminPassword,
-              displayName: adminDisplayName,
-              emailVerified: true
-            });
-            console.log(`[ADMIN-AUTH] Successfully created overall admin account in Cloud Auth with UID: ${newUserRecord.uid}`);
-          } else {
-            console.error('[ADMIN-AUTH] Error checking admin account:', authErr);
-          }
-        }
-      }
-    }
-  } catch (err: any) {
-    console.error('[ADMIN-AUTH] Could not reconcile admin account in Cloud Run container:', err.message);
-  }
 }
 
 startServer().catch(err => {

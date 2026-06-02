@@ -126,7 +126,7 @@ export default function App() {
   }, [isCommandPaletteOpen]);
 
   useEffect(() => {
-    if (!currentUser || !auth.currentUser) {
+    if (!currentUser) {
       setNotifications([]);
       return;
     }
@@ -158,7 +158,7 @@ export default function App() {
         }
       });
     }, (error) => {
-      console.warn('Live notifications snapshot blocked or error:', error.message);
+      handleFirestoreError(error, OperationType.LIST, 'notifications');
     });
 
     return () => unsubscribe();
@@ -431,40 +431,34 @@ export default function App() {
 
     fetchSqliteResources();
 
-    let unsubscribe: (() => void) | undefined;
-
-    if (auth.currentUser) {
-      const q = query(collection(db, 'resources'), orderBy('createdAt', 'desc'));
-      unsubscribe = onSnapshot(q, (snapshot) => {
-        const firestoreResources: Resource[] = snapshot.docs.map(doc => ({
-          ...doc.data(),
-          id: doc.id
-        } as Resource));
+    const q = query(collection(db, 'resources'), orderBy('createdAt', 'desc'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const firestoreResources: Resource[] = snapshot.docs.map(doc => ({
+        ...doc.data(),
+        id: doc.id
+      } as Resource));
+      
+      setResources(prev => {
+        // We prioritize Firestore resources for real-time updates
+        const firestoreUrls = new Set(firestoreResources.map(r => r.fileUrl).filter(Boolean));
+        const firestoreIds = new Set(firestoreResources.map(r => r.id));
         
-        setResources(prev => {
-          // We prioritize Firestore resources for real-time updates
-          const firestoreUrls = new Set(firestoreResources.map(r => r.fileUrl).filter(Boolean));
-          const firestoreIds = new Set(firestoreResources.map(r => r.id));
+        // Keep SQLite resources that are NOT in Firestore (by ID or URL)
+        const sqliteOnly = prev.filter(r => {
+          const isSqlite = !isNaN(Number(r.id));
+          if (!isSqlite) return false;
           
-          // Keep SQLite resources that are NOT in Firestore (by ID or URL)
-          const sqliteOnly = prev.filter(r => {
-            const isSqlite = !isNaN(Number(r.id));
-            if (!isSqlite) return false;
-            
-            const existsInFirestore = firestoreIds.has(r.id) || (r.fileUrl && firestoreUrls.has(r.fileUrl));
-            return !existsInFirestore;
-          });
-          
-          return [...firestoreResources, ...sqliteOnly];
+          const existsInFirestore = firestoreIds.has(r.id) || (r.fileUrl && firestoreUrls.has(r.fileUrl));
+          return !existsInFirestore;
         });
-      }, (error) => {
-        console.warn('Live resources snapshot blocked or error:', error.message);
+        
+        return [...firestoreResources, ...sqliteOnly];
       });
-    }
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'resources');
+    });
 
-    return () => {
-      if (unsubscribe) unsubscribe();
-    };
+    return () => unsubscribe();
   }, [currentUser]);
 
   useEffect(() => {
@@ -568,12 +562,8 @@ export default function App() {
     }
   }, []);
 
-  const toggleTheme = useCallback((targetTheme?: 'light' | 'dark' | React.MouseEvent) => {
-    if (targetTheme === 'light' || targetTheme === 'dark') {
-      setTheme(targetTheme);
-    } else {
-      setTheme(prev => prev === 'light' ? 'dark' : 'light');
-    }
+  const toggleTheme = useCallback(() => {
+    setTheme(prev => prev === 'light' ? 'dark' : 'light');
   }, []);
 
   const onVoiceSearch = useCallback((query: string) => {
