@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   User, 
   Palette, 
@@ -76,6 +76,10 @@ export function SettingsView({ user, theme, onThemeChange, onUserUpdate }: Setti
 
   // Local state for profile edits
   const [editedUser, setEditedUser] = useState<UserType>({ ...user });
+
+  useEffect(() => {
+    setEditedUser({ ...user });
+  }, [user]);
   
   // UI Preferences (Local)
   const [uiSize, setUiSize] = useState('medium');
@@ -83,32 +87,71 @@ export function SettingsView({ user, theme, onThemeChange, onUserUpdate }: Setti
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       if (file.size > 3 * 1024 * 1024) {
         alert('File is too large. Please select an image under 3MB.');
         return;
       }
-      const reader = new FileReader();
-      reader.onload = async (event) => {
-        const base64Data = event.target?.result as string;
-        setEditedUser(prev => ({ ...prev, avatarUrl: base64Data }));
-        
-        try {
-          const userRef = doc(db, 'users', user.uid);
-          await updateDoc(userRef, {
-            avatarUrl: base64Data
-          });
-          onUserUpdate({ ...editedUser, avatarUrl: base64Data });
-          setSaveStatus('success');
-          setTimeout(() => setSaveStatus('idle'), 3000);
-        } catch (err) {
-          console.error("Failed to update avatar in real-time:", err);
-          setSaveStatus('error');
+      
+      setIsSaving(true);
+      setSaveStatus('idle');
+
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const response = await fetch('/api/upload', {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!response.ok) {
+          throw new Error('Avatar upload to server failed');
         }
-      };
-      reader.readAsDataURL(file);
+
+        const data = await response.json();
+        const fileUrl = data.url; // /uploads/filename
+
+        // Update Firestore
+        const userRef = doc(db, 'users', user.uid);
+        await updateDoc(userRef, {
+          avatarUrl: fileUrl
+        });
+
+        const newUserData = { ...user, ...editedUser, avatarUrl: fileUrl };
+        setEditedUser(newUserData);
+        onUserUpdate(newUserData);
+
+        setSaveStatus('success');
+        setTimeout(() => setSaveStatus('idle'), 3000);
+      } catch (err: any) {
+        console.warn("Express avatar upload failed. Attempting offline Base64 fallback...", err);
+        
+        // Fallback to local Base64 reading if offline or server fails
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+          const base64Data = event.target?.result as string;
+          setEditedUser(prev => ({ ...prev, avatarUrl: base64Data }));
+          try {
+            const userRef = doc(db, 'users', user.uid);
+            await updateDoc(userRef, {
+              avatarUrl: base64Data
+            });
+            const newUserData = { ...user, ...editedUser, avatarUrl: base64Data };
+            onUserUpdate(newUserData);
+            setSaveStatus('success');
+            setTimeout(() => setSaveStatus('idle'), 3000);
+          } catch (docErr) {
+            console.error("Offline base64 update fallback failed:", docErr);
+            setSaveStatus('error');
+          }
+        };
+        reader.readAsDataURL(file);
+      } finally {
+        setIsSaving(false);
+      }
     }
   };
 

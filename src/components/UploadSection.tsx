@@ -177,22 +177,29 @@ export function UploadSection({ user, onUploadComplete }: UploadSectionProps) {
           }
 
           // 1. Write to Firestore for real-time collaboration Sync
-          await addDoc(collection(db, 'resources'), {
-            title: formData.title,
-            author: formData.author,
-            type: type,
-            description: formData.description,
-            fileUrl: fileUrl,
-            fileSize: fileSize,
-            coverUrl: coverUrl,
-            createdAt: new Date().toISOString(),
-            timestamp: serverTimestamp(),
-            status: 'available',
-            genre: formData.category,
-            className: formData.className,
-            subject: formData.subject,
-            uploadedBy: user.uid
-          });
+          let firestoreWriteSuccess = false;
+          try {
+            await addDoc(collection(db, 'resources'), {
+              title: formData.title,
+              author: formData.author,
+              type: type,
+              description: formData.description,
+              fileUrl: fileUrl,
+              fileSize: fileSize,
+              coverUrl: coverUrl,
+              createdAt: new Date().toISOString(),
+              timestamp: serverTimestamp(),
+              status: 'available',
+              genre: formData.category,
+              className: formData.className,
+              subject: formData.subject,
+              uploadedBy: user.uid
+            });
+            firestoreWriteSuccess = true;
+            console.log('[UPLOAD] Firestore real-time sync successful.');
+          } catch (fsErr: any) {
+            console.warn('[UPLOAD] Firestore real-time sync failed. Carrying on with server SQLite catalog:', fsErr);
+          }
 
           // 2. Synchronize to SQLite for the server-side Catalog, search index and admin views (only duplicate if we didn't already use fallback)
           if (uploadSuccess) {
@@ -214,6 +221,10 @@ export function UploadSection({ user, onUploadComplete }: UploadSectionProps) {
             } catch (sqliteErr) {
               console.error('[UPLOAD] SQLite sync failed (non-critical):', sqliteErr);
             }
+          } else {
+            // Even if client GCS failed and we used Express fallback (which already saved to SQLite),
+            // tell the user it successfully uploaded offline or fallback!
+            console.log('[UPLOAD] Fallback Express backend has stored the file in SQLite.');
           }
         } else {
           // OFFLINE: Queue using our high-fidelity SyncService
