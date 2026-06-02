@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { User as UserIcon, Lock, Loader2, ShieldCheck, Key, BookOpen, Bot, Globe, AlertCircle } from 'lucide-react';
 import { Role, User } from '../types';
 import { auth, db } from '../firebase';
-import logoUrl from '../assets/images/library_core_logo_1780128110753.png';
+const logoUrl = '/logo.png';
 import { 
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword 

@@ -163,7 +163,8 @@ export function SettingsView({ user, theme, onThemeChange, onUserUpdate }: Setti
       await updateDoc(userRef, {
         fullName: editedUser.fullName,
         email: editedUser.email || '',
-        avatarUrl: editedUser.avatarUrl || (window as any).firebaseUser?.photoURL || ''
+        avatarUrl: editedUser.avatarUrl || (window as any).firebaseUser?.photoURL || '',
+        role: editedUser.role
       });
       onUserUpdate(editedUser);
       setSaveStatus('success');
@@ -240,6 +241,18 @@ export function SettingsView({ user, theme, onThemeChange, onUserUpdate }: Setti
                     onChange={e => setEditedUser({ ...editedUser, email: e.target.value })}
                     className="w-full px-4 py-3 bg-gray-50/50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-violet-600/20 focus:border-violet-600 focus:outline-none font-medium transition-all"
                   />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Academic Role</label>
+                  <select 
+                    value={editedUser.role || 'student'}
+                    onChange={e => setEditedUser({ ...editedUser, role: e.target.value as any })}
+                    className="w-full px-4 py-3 bg-gray-50/50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-violet-600/20 focus:border-violet-600 focus:outline-none font-medium transition-all"
+                  >
+                    <option value="student">Student / Scholar</option>
+                    <option value="teacher">Teacher / Academic Coach</option>
+                    <option value="admin">Administrator</option>
+                  </select>
                 </div>
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">New Password</label>
