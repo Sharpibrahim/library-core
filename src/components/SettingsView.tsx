@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { 
   User, 
   Palette, 
@@ -81,6 +81,37 @@ export function SettingsView({ user, theme, onThemeChange, onUserUpdate }: Setti
   const [uiSize, setUiSize] = useState('medium');
   const [fontSize, setFontSize] = useState(16);
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 3 * 1024 * 1024) {
+        alert('File is too large. Please select an image under 3MB.');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        const base64Data = event.target?.result as string;
+        setEditedUser(prev => ({ ...prev, avatarUrl: base64Data }));
+        
+        try {
+          const userRef = doc(db, 'users', user.uid);
+          await updateDoc(userRef, {
+            avatarUrl: base64Data
+          });
+          onUserUpdate({ ...editedUser, avatarUrl: base64Data });
+          setSaveStatus('success');
+          setTimeout(() => setSaveStatus('idle'), 3000);
+        } catch (err) {
+          console.error("Failed to update avatar in real-time:", err);
+          setSaveStatus('error');
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const handleSave = async () => {
     setIsSaving(true);
     setSaveStatus('idle');
@@ -131,12 +162,17 @@ export function SettingsView({ user, theme, onThemeChange, onUserUpdate }: Setti
                       />
                     </div>
                   </div>
+                  <input 
+                    type="file" 
+                    ref={fileInputRef} 
+                    onChange={handleAvatarUpload} 
+                    accept="image/*" 
+                    className="hidden" 
+                  />
                   <button 
-                    onClick={() => {
-                      const url = prompt('Enter Image URL:');
-                      if (url) setEditedUser({ ...editedUser, avatarUrl: url });
-                    }}
+                    onClick={() => fileInputRef.current?.click()}
                     className="absolute bottom-0 right-0 p-2 bg-white border border-gray-200 rounded-full shadow-lg hover:bg-gray-50 transition-all hover:scale-110 active:scale-95"
+                    title="Upload Profile Picture"
                   >
                     <Camera className="w-4 h-4 text-violet-600" />
                   </button>

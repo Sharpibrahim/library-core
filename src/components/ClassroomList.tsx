@@ -42,7 +42,7 @@ export function ClassroomList({ user }: ClassroomListProps) {
     fetchClasses();
 
     const handleToggleCreate = (e: any) => {
-       if (e.detail) setIsCreateModalOpen(true);
+       if (e.detail && (user.role === 'teacher' || user.role === 'admin')) setIsCreateModalOpen(true);
     };
     window.addEventListener('toggleCreateClass', handleToggleCreate);
     return () => {
@@ -76,6 +76,10 @@ export function ClassroomList({ user }: ClassroomListProps) {
   };
 
   const handleCreateClass = async () => {
+    if (!isTeacher) {
+      alert("Only teachers and administrators are allowed to create classes.");
+      return;
+    }
     if (!newClassName || !newClassSubject) return;
     try {
       const res = await fetch('/api/classes', {
@@ -124,12 +128,14 @@ export function ClassroomList({ user }: ClassroomListProps) {
              >
                <UserPlus className="w-5 h-5" /> Join Class
              </button>
-             <button 
-               onClick={() => setIsCreateModalOpen(true)}
-               className="flex items-center gap-2 px-6 py-3 bg-purple-600 text-white rounded-xl font-bold hover:bg-purple-700 transition-colors shadow-lg shadow-purple-600/20"
-             >
-               <Plus className="w-5 h-5" /> Create Class
-             </button>
+             {isTeacher && (
+               <button 
+                 onClick={() => setIsCreateModalOpen(true)}
+                 className="flex items-center gap-2 px-6 py-3 bg-purple-600 text-white rounded-xl font-bold hover:bg-purple-700 transition-colors shadow-lg shadow-purple-600/20"
+               >
+                 <Plus className="w-5 h-5" /> Create Class
+               </button>
+             )}
           </div>
        </div>
 

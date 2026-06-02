@@ -1630,6 +1630,15 @@ const generateClassCode = () => {
 app.post('/api/classes', (req, res) => {
   try {
     const { name, subject, teacher_id, teacher_name } = req.body;
+    
+    // Server-side block for students
+    if (teacher_id) {
+      const userRow = db.prepare('SELECT role FROM users WHERE uid = ?').get(teacher_id) as any;
+      if (userRow && userRow.role === 'student') {
+        return res.status(403).json({ error: 'Access denied: Students are not permitted to create classrooms.' });
+      }
+    }
+
     let code = generateClassCode();
     // basic collision check
     while (db.prepare('SELECT id FROM classes WHERE class_code = ?').get(code)) {
@@ -1683,7 +1692,8 @@ app.get('/api/users/:userId/classes', (req, res) => {
 app.post('/api/classes/join', (req, res) => {
   try {
     const { class_code, student_id, student_name } = req.body;
-    const cls = db.prepare('SELECT id FROM classes WHERE class_code = ?').get(class_code) as any;
+    const clean_code = (class_code || '').trim().toUpperCase();
+    const cls = db.prepare('SELECT id FROM classes WHERE UPPER(class_code) = ?').get(clean_code) as any;
     if (!cls) return res.status(404).json({ error: 'Invalid class code' });
     
     // Add student_uid safely

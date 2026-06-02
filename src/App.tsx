@@ -564,7 +564,6 @@ export default function App() {
 
   const toggleTheme = useCallback(() => {
     setTheme(prev => prev === 'light' ? 'dark' : 'light');
-    document.documentElement.classList.toggle('dark');
   }, []);
 
   const onVoiceSearch = useCallback((query: string) => {

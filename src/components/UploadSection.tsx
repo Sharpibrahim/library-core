@@ -116,35 +116,65 @@ export function UploadSection({ user, onUploadComplete }: UploadSectionProps) {
 
         if (isOnline) {
           // ONLINE: USE BOTH PERMANENT GOOGLE CLOUD STORAGE PERSISTENCE AND FIRESTORE SYNC
-          console.log('[UPLOAD] Uploading file directly to permanent Cloud Storage using Firebase Client SDK...');
+          console.log('[UPLOAD] Uploading file to permanent Cloud Storage using Firebase Client SDK...');
           
-          const storagePath = `resources/${user.uid}/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.]/g, '_')}`;
-          const storageRef = ref(storage, storagePath);
-          const uploadTask = uploadBytesResumable(storageRef, file);
+          let uploadSuccess = false;
+          try {
+            const storagePath = `resources/${user.uid}/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.]/g, '_')}`;
+            const storageRef = ref(storage, storagePath);
+            const uploadTask = uploadBytesResumable(storageRef, file);
 
-          const result = await new Promise<{ url: string; size: number }>((resolve, reject) => {
-            uploadTask.on(
-              'state_changed',
-              (snapshot) => {
-                const progressPercent = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
-                setProgress(progressPercent);
-              },
-              (error) => {
-                reject(error);
-              },
-              async () => {
-                try {
-                  const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
-                  resolve({ url: downloadUrl, size: file.size });
-                } catch (e) {
-                  reject(e);
+            const result = await new Promise<{ url: string; size: number }>((resolve, reject) => {
+              uploadTask.on(
+                'state_changed',
+                (snapshot) => {
+                  const progressPercent = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
+                  setProgress(progressPercent);
+                },
+                (error) => {
+                  reject(error);
+                },
+                async () => {
+                  try {
+                    const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
+                    resolve({ url: downloadUrl, size: file.size });
+                  } catch (e) {
+                    reject(e);
+                  }
                 }
-              }
-            );
-          });
+              );
+            });
 
-          fileUrl = result.url;
-          console.log(`[UPLOAD] Firebase Cloud Storage upload successful. URL: ${fileUrl}`);
+            fileUrl = result.url;
+            console.log(`[UPLOAD] Firebase Cloud Storage upload successful. URL: ${fileUrl}`);
+            uploadSuccess = true;
+          } catch (storageErr) {
+            console.warn('[UPLOAD] Firebase Storage client upload failed, using Express backend fallback:', storageErr);
+          }
+
+          if (!uploadSuccess) {
+            console.log('[UPLOAD] Uploading file directly to Express backend server...');
+            const localFormData = new FormData();
+            localFormData.append('file', file);
+            localFormData.append('title', formData.title);
+            localFormData.append('author', formData.author);
+            localFormData.append('type', type);
+            localFormData.append('description', formData.description || '');
+            localFormData.append('cover_url', coverUrl);
+            localFormData.append('genre', formData.category);
+
+            const serverRes = await fetch('/api/resources', {
+              method: 'POST',
+              body: localFormData
+            });
+            
+            if (!serverRes.ok) {
+              throw new Error('Express backend fallback upload failed.');
+            }
+            const serverData = await serverRes.json();
+            fileUrl = serverData.file_url;
+            console.log(`[UPLOAD] Express server upload fallback successful. URL: ${fileUrl}`);
+          }
 
           // 1. Write to Firestore for real-time collaboration Sync
           await addDoc(collection(db, 'resources'), {
@@ -164,24 +194,26 @@ export function UploadSection({ user, onUploadComplete }: UploadSectionProps) {
             uploadedBy: user.uid
           });
 
-          // 2. Synchronize to SQLite for the server-side Catalog, search index and admin views
-          const syncFormData = new FormData();
-          syncFormData.append('title', formData.title);
-          syncFormData.append('author', formData.author);
-          syncFormData.append('type', type);
-          syncFormData.append('description', formData.description || '');
-          syncFormData.append('cover_url', coverUrl);
-          syncFormData.append('genre', formData.category);
-          syncFormData.append('body_file_url', fileUrl);
+          // 2. Synchronize to SQLite for the server-side Catalog, search index and admin views (only duplicate if we didn't already use fallback)
+          if (uploadSuccess) {
+            const syncFormData = new FormData();
+            syncFormData.append('title', formData.title);
+            syncFormData.append('author', formData.author);
+            syncFormData.append('type', type);
+            syncFormData.append('description', formData.description || '');
+            syncFormData.append('cover_url', coverUrl);
+            syncFormData.append('genre', formData.category);
+            syncFormData.append('body_file_url', fileUrl);
 
-          try {
-            await fetch('/api/resources', {
-              method: 'POST',
-              body: syncFormData
-            });
-            console.log('[UPLOAD] SQLite sync successful.');
-          } catch (sqliteErr) {
-            console.error('[UPLOAD] SQLite sync failed (non-critical):', sqliteErr);
+            try {
+              await fetch('/api/resources', {
+                method: 'POST',
+                body: syncFormData
+              });
+              console.log('[UPLOAD] SQLite sync successful.');
+            } catch (sqliteErr) {
+              console.error('[UPLOAD] SQLite sync failed (non-critical):', sqliteErr);
+            }
           }
         } else {
           // OFFLINE: Queue using our high-fidelity SyncService

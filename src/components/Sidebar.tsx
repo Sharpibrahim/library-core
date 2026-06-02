@@ -46,12 +46,12 @@ const MENU_ITEMS = [
   { id: 'notifications', label: 'Notifications', icon: Bell },
   { id: 'messages', label: 'Expert Chat', icon: MessageSquare, badge: true },
   { id: 'ai-assistant', label: 'AI Assistant', icon: Bot },
+  { id: 'settings', label: 'System Settings', icon: Settings },
   { id: 'upload', label: 'Upload Content', icon: Upload },
 ];
 
 const ADMIN_ITEMS = [
   { id: 'admin-panel', label: 'LMS Management', icon: ShieldCheck },
-  { id: 'settings', label: 'System Settings', icon: Settings },
 ];
 
 export function Sidebar({ activeTab, setActiveTab, onLogout, isOpen, setIsOpen, user, hasNewMessage, onToggleNotifications, onOpenTutorial }: SidebarProps) {
