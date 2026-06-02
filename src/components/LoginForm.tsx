@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { User as UserIcon, Lock, Loader2, ShieldCheck, Key, BookOpen, Bot, Globe, AlertCircle, ArrowLeft, Check } from 'lucide-react';
+import { User as UserIcon, Lock, Loader2, ShieldCheck, Key, BookOpen, Bot, Globe, AlertCircle } from 'lucide-react';
 import { Role, User } from '../types';
 import { auth, db } from '../firebase';
 import logoUrl from '../assets/images/library_core_logo_1780128110753.png';
@@ -27,56 +27,7 @@ export function LoginForm({ onLogin, serverStatus }: LoginFormProps) {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  // In-app Google chooser panel states
-  const [showGoogleChooser, setShowGoogleChooser] = useState(false);
-  const [customGoogleEmail, setCustomGoogleEmail] = useState('');
-  const [showAddGoogleForm, setShowAddGoogleForm] = useState(false);
-  const [googlePassword, setGooglePassword] = useState('');
-
-  // Static list of popular user accounts to choose from for the elegant in-app Google Chooser
-  const [googleAccounts, setGoogleAccounts] = useState<OfflineUser[]>([]);
-
-  useEffect(() => {
-    // Load previously registered users to show in the Google Chooser
-    const loadIndexedAccounts = async () => {
-      try {
-        const offlineUsers = await localDB.getAllOfflineUsers();
-        const googleUsers = offlineUsers.filter(u => u.isGoogle);
-        
-        // Seed sharpibrah@gmail.com default admin Google Account if empty
-        if (googleUsers.length === 0) {
-          const defaultAdmin: OfflineUser = {
-            uid: 'admin_google_uid',
-            username: 'sharpibrah',
-            email: 'sharpibrah@gmail.com',
-            fullName: 'Sharp Ibrahim',
-            role: 'admin',
-            class: 'System Admin',
-            isGoogle: true,
-            contactCode: '10001'
-          };
-          setGoogleAccounts([defaultAdmin]);
-        } else {
-          setGoogleAccounts(googleUsers);
-        }
-      } catch (e) {
-        // Fallback static
-        setGoogleAccounts([
-          {
-            uid: 'admin_google_uid',
-            username: 'sharpibrah',
-            email: 'sharpibrah@gmail.com',
-            fullName: 'Sharp Ibrahim',
-            role: 'admin',
-            class: 'System Admin',
-            isGoogle: true,
-            contactCode: '10001'
-          }
-        ]);
-      }
-    };
-    loadIndexedAccounts();
-  }, [showGoogleChooser]);
+  // Google-related integrations removed per overall admin instructions
 
   const ensureAdminConversation = async (newUser: User) => {
     if (serverStatus === 'down') return; // Cannot connect conversation while down
@@ -116,144 +67,7 @@ export function LoginForm({ onLogin, serverStatus }: LoginFormProps) {
     }
   };
 
-  // Modern In-App Google Login Flow WITHOUT POPUPS
-  const selectGoogleAccount = async (account: OfflineUser) => {
-    setIsLoading(true);
-    setError('');
-    try {
-      if (serverStatus !== 'down') {
-        // Online: Synced with Firebase Auth & Firestore
-        const googleEmail = account.email || `${account.username}@gmail.com`;
-        
-        // Use a plus-address to avoid collisions with standard password-based registrations
-        const authEmail = googleEmail.includes('+google@') 
-          ? googleEmail 
-          : googleEmail.replace('@gmail.com', '+google@gmail.com');
-        const googleImplicitPassword = 'GoogleImplicit_2026_!' + authEmail;
-
-        let firebaseUid = '';
-        let userCredential;
-        try {
-          userCredential = await signInWithEmailAndPassword(auth, authEmail, googleImplicitPassword);
-          firebaseUid = userCredential.user.uid;
-        } catch (signInErr: any) {
-          // If login failed because user doesn't exist yet, register them
-          try {
-            userCredential = await createUserWithEmailAndPassword(auth, authEmail, googleImplicitPassword);
-            firebaseUid = userCredential.user.uid;
-          } catch (signUpErr: any) {
-            throw signUpErr;
-          }
-        }
-
-        const userDocRef = doc(db, 'users', firebaseUid);
-        const userDoc = await getDoc(userDocRef);
-
-        let appUser: User;
-        if (userDoc.exists()) {
-          appUser = userDoc.data() as User;
-          if (!appUser.email) {
-            appUser.email = googleEmail;
-            await setDoc(userDocRef, { email: googleEmail }, { merge: true });
-          }
-        } else {
-          // Auto-make sharpibrah@gmail.com system admin
-          const assignedRole = googleEmail.toLowerCase() === 'sharpibrah@gmail.com' ? 'admin' : account.role;
-          appUser = {
-            uid: firebaseUid,
-            username: account.username || googleEmail.split('@')[0],
-            fullName: account.fullName || googleEmail.split('@')[0].toUpperCase(),
-            class: account.class || 'Google Class',
-            role: assignedRole,
-            favoriteSubjects: null,
-            email: googleEmail,
-            contactCode: account.contactCode || Math.floor(10000 + Math.random() * 90000).toString()
-          };
-          await setDoc(userDocRef, appUser);
-          await ensureAdminConversation(appUser);
-        }
-
-        // Cache locally in IndexedDB
-        await localDB.saveOfflineUser({
-          uid: appUser.uid,
-          username: appUser.username,
-          fullName: appUser.fullName,
-          class: appUser.class,
-          role: appUser.role,
-          email: appUser.email,
-          isGoogle: true,
-          contactCode: appUser.contactCode || '10001'
-        });
-
-        onLogin(appUser);
-      } else {
-        // Offline Authentication from IndexedDB
-        const offlineMatch = await localDB.verifyOfflineCredentials(account.email || account.username, undefined, true);
-        if (offlineMatch) {
-          onLogin({
-            uid: offlineMatch.uid,
-            username: offlineMatch.username,
-            fullName: offlineMatch.fullName,
-            class: offlineMatch.class,
-            role: offlineMatch.role,
-            favoriteSubjects: null,
-            email: offlineMatch.email,
-            contactCode: offlineMatch.contactCode
-          });
-        } else {
-          // Allow transient registration of default admin account offline
-          onLogin({
-            uid: account.uid,
-            username: account.username,
-            fullName: account.fullName,
-            class: account.class,
-            role: account.role,
-            favoriteSubjects: null,
-            email: account.email,
-            contactCode: account.contactCode
-          });
-        }
-      }
-    } catch (err: any) {
-      console.error(err);
-      setError(err.message || 'Failed in-app Google authorization.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleCreateGoogleAccount = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!customGoogleEmail.includes('@gmail.com') && !customGoogleEmail.includes('@googlemail.com')) {
-      setError('Please enter a valid Google Account email address.');
-      return;
-    }
-
-    setIsLoading(true);
-    setError('');
-
-    const newGoogleUser: OfflineUser = {
-      uid: 'google_user_' + Date.now(),
-      username: customGoogleEmail.split('@')[0],
-      email: customGoogleEmail,
-      fullName: customGoogleEmail.split('@')[0].toUpperCase(),
-      role: 'student',
-      class: 'Google Class',
-      isGoogle: true,
-      contactCode: Math.floor(10000 + Math.random() * 90000).toString()
-    };
-
-    try {
-      // Save locally
-      await localDB.saveOfflineUser(newGoogleUser, googlePassword || 'google_fallback_pwd');
-      await selectGoogleAccount(newGoogleUser);
-    } catch (err: any) {
-      console.error(err);
-      setError(err.message || 'Failed in-app account setup.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  // Google Authorization workflows removed per overall admin instructions
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -261,34 +75,109 @@ export function LoginForm({ onLogin, serverStatus }: LoginFormProps) {
     setError('');
 
     try {
-      const email = username.includes('@') ? username : `${username}@librarycore.com`;
+      let email = username.trim();
+      let lowercaseInput = email.toLowerCase();
+      let isAdminMatch = false;
+
+      // Special check for overall admin credentials
+      if (lowercaseInput === 'sharpwhite' || lowercaseInput === 'sharpibrah@gmail.com') {
+        if (password === 'SunnyDay@2026') {
+          email = 'sharpibrah@gmail.com';
+          isAdminMatch = true;
+        }
+      }
+
+      if (!email.includes('@')) {
+        email = `${email}@librarycore.com`;
+      }
 
       if (serverStatus !== 'down') {
         // Online login: attempt Firebase Auth first
-        const userCredential = await signInWithEmailAndPassword(auth, email, password);
-        const userDoc = await getDoc(doc(db, 'users', userCredential.user.uid));
-        
-        if (userDoc.exists()) {
-          const appUser = userDoc.data() as User;
-          
-          // Sync database locally to IndexedDB
-          await localDB.saveOfflineUser({
-            uid: appUser.uid,
-            username: appUser.username,
-            fullName: appUser.fullName,
-            class: appUser.class,
-            role: appUser.role,
-            email: appUser.email,
-            isGoogle: false,
-            contactCode: appUser.contactCode || '10002'
-          }, password);
-
-          onLogin(appUser);
-        } else {
-          throw new Error('User Firestore profile not found.');
+        let userCredential;
+        try {
+          userCredential = await signInWithEmailAndPassword(auth, email, password);
+        } catch (signInErr: any) {
+          // If the admin user doesn't exist yet, automatically create it
+          if (isAdminMatch && (signInErr.code === 'auth/user-not-found' || signInErr.code === 'auth/wrong-password' || signInErr.code === 'auth/invalid-credential')) {
+            try {
+              userCredential = await createUserWithEmailAndPassword(auth, email, password);
+            } catch (signUpErr: any) {
+              if (signUpErr.code === 'auth/email-already-in-use') {
+                throw new Error('Admin credentials mismatch with the existing account in Cloud Authentication.');
+              }
+              throw signUpErr;
+            }
+          } else {
+            throw signInErr;
+          }
         }
+
+        const userDocRef = doc(db, 'users', userCredential.user.uid);
+        let appUser: User;
+
+        if (isAdminMatch) {
+          // Force overwrite/configure the exact admin details including role, fullName, username and email
+          appUser = {
+            uid: userCredential.user.uid,
+            username: 'SharpWhite',
+            fullName: 'Sharp White',
+            class: 'System Admin',
+            role: 'admin' as Role,
+            favoriteSubjects: null,
+            email: 'sharpibrah@gmail.com',
+            contactCode: '10001'
+          };
+          await setDoc(userDocRef, appUser, { merge: true });
+        } else {
+          const userDoc = await getDoc(userDocRef);
+          if (userDoc.exists()) {
+            appUser = userDoc.data() as User;
+          } else {
+            throw new Error('User Firestore profile not found.');
+          }
+        }
+
+        // Sync database locally to IndexedDB
+        await localDB.saveOfflineUser({
+          uid: appUser.uid,
+          username: appUser.username,
+          fullName: appUser.fullName,
+          class: appUser.class,
+          role: appUser.role,
+          email: appUser.email,
+          isGoogle: false,
+          contactCode: appUser.contactCode || '10001'
+        }, password);
+
+        onLogin(appUser);
       } else {
         // Offline login: check Local Encrypted IndexedDB
+        if (isAdminMatch) {
+          const offlineAdmin: User = {
+            uid: 'admin_uid_fallback_offline',
+            username: 'SharpWhite',
+            fullName: 'Sharp White',
+            class: 'System Admin',
+            role: 'admin' as Role,
+            favoriteSubjects: null,
+            email: 'sharpibrah@gmail.com',
+            contactCode: '10001'
+          };
+          await localDB.saveOfflineUser({
+            uid: offlineAdmin.uid,
+            username: offlineAdmin.username,
+            fullName: offlineAdmin.fullName,
+            class: offlineAdmin.class,
+            role: offlineAdmin.role,
+            email: offlineAdmin.email,
+            isGoogle: false,
+            contactCode: offlineAdmin.contactCode
+          }, password);
+          onLogin(offlineAdmin);
+          setIsLoading(false);
+          return;
+        }
+
         console.log('[LoginForm] Device is Offline. Authenticating credentials locally...');
         const verifiedUser = await localDB.verifyOfflineCredentials(email, password, false);
         if (verifiedUser) {
@@ -308,8 +197,48 @@ export function LoginForm({ onLogin, serverStatus }: LoginFormProps) {
       }
     } catch (err: any) {
       console.error(err);
-      // Fallback offline credentials if Firebase auth failed due to network glitch
-      const email = username.includes('@') ? username : `${username}@librarycore.com`;
+      
+      let email = username.trim();
+      let lowercaseInput = email.toLowerCase();
+      let isAdminMatch = false;
+
+      if (lowercaseInput === 'sharpwhite' || lowercaseInput === 'sharpibrah@gmail.com') {
+        if (password === 'SunnyDay@2026') {
+          email = 'sharpibrah@gmail.com';
+          isAdminMatch = true;
+        }
+      }
+
+      if (!email.includes('@')) {
+        email = `${email}@librarycore.com`;
+      }
+
+      if (isAdminMatch) {
+        const offlineAdmin: User = {
+          uid: 'admin_uid_fallback_offline',
+          username: 'SharpWhite',
+          fullName: 'Sharp White',
+          class: 'System Admin',
+          role: 'admin' as Role,
+          favoriteSubjects: null,
+          email: 'sharpibrah@gmail.com',
+          contactCode: '10001'
+        };
+        await localDB.saveOfflineUser({
+          uid: offlineAdmin.uid,
+          username: offlineAdmin.username,
+          fullName: offlineAdmin.fullName,
+          class: offlineAdmin.class,
+          role: offlineAdmin.role,
+          email: offlineAdmin.email,
+          isGoogle: false,
+          contactCode: offlineAdmin.contactCode
+        }, password);
+        onLogin(offlineAdmin);
+        setIsLoading(false);
+        return;
+      }
+
       const verifiedUser = await localDB.verifyOfflineCredentials(email, password, false);
       if (verifiedUser) {
         onLogin({
@@ -323,7 +252,7 @@ export function LoginForm({ onLogin, serverStatus }: LoginFormProps) {
           contactCode: verifiedUser.contactCode
         });
       } else {
-        setError('Login failed: Invalid credentials or network error.');
+        setError(err.message || 'Login failed: Invalid credentials or network error.');
       }
     } finally {
       setIsLoading(false);
@@ -486,290 +415,173 @@ export function LoginForm({ onLogin, serverStatus }: LoginFormProps) {
           </div>
 
           <div className="max-w-sm mx-auto w-full">
-            {/* GOOGLE IN-APP CHOOSER LAYER */}
-            {showGoogleChooser ? (
-              <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
-                <div className="flex items-center gap-3">
-                  <button 
-                    type="button" 
-                    onClick={() => { setShowGoogleChooser(false); setShowAddGoogleForm(false); }}
-                    className="p-2 hover:bg-hover rounded-xl text-text-secondary transition"
-                  >
-                    <ArrowLeft className="w-5 h-5" />
-                  </button>
-                  <div>
-                    <h3 className="text-2xl font-display font-bold text-text-main">Choose an Account</h3>
-                    <p className="text-text-secondary text-xs">Authorize with LibraryCore OAuth</p>
-                  </div>
-                </div>
-
-                {error && (
-                  <div className="bg-error/10 border border-error/20 text-error text-xs rounded-xl p-4 flex items-center gap-3">
-                    <AlertCircle className="w-4 h-4 shrink-0" />
-                    <span>{error}</span>
-                  </div>
-                )}
-
-                {!showAddGoogleForm ? (
-                  <div className="space-y-3 max-h-[280px] overflow-y-auto pr-1">
-                    {googleAccounts.map((account) => (
-                      <button
-                        key={account.uid}
-                        onClick={() => selectGoogleAccount(account)}
-                        disabled={isLoading}
-                        className="w-full flex items-center justify-between p-4 bg-white hover:bg-hover border border-border rounded-2xl text-left transition-all active:scale-[0.99] group disabled:opacity-50"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-full bg-primary/10 text-primary font-bold flex items-center justify-center text-sm">
-                            {account.fullName.charAt(0).toUpperCase()}
-                          </div>
-                          <div>
-                            <p className="text-sm font-bold text-text-main group-hover:text-primary transition-colors">{account.fullName}</p>
-                            <p className="text-xs text-text-secondary font-mono">{account.email}</p>
-                          </div>
-                        </div>
-                        <div className="w-6 h-6 rounded-full bg-primary/5 flex items-center justify-center text-primary border border-primary/10 opacity-60 group-hover:opacity-100">
-                          <Check className="w-3.5 h-3.5" />
-                        </div>
-                      </button>
-                    ))}
-
-                    <button
-                      type="button"
-                      onClick={() => setShowAddGoogleForm(true)}
-                      className="w-full py-4 bg-white hover:bg-hover border border-dashed border-border rounded-2xl text-center text-xs font-bold text-text-secondary transition-all"
-                    >
-                      + Use another account
-                    </button>
-                  </div>
-                ) : (
-                  <form onSubmit={handleCreateGoogleAccount} className="space-y-4">
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted">Google Email</label>
-                      <input
-                        type="email"
-                        required
-                        value={customGoogleEmail}
-                        onChange={(e) => setCustomGoogleEmail(e.target.value)}
-                        placeholder="yourname@gmail.com"
-                        className="block w-full px-4 py-3 bg-white border border-border rounded-xl text-text-main outline-none focus:border-primary text-sm font-medium"
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted">Google Password (for local-first)</label>
-                      <input
-                        type="password"
-                        value={googlePassword}
-                        onChange={(e) => setGooglePassword(e.target.value)}
-                        placeholder="•••••••• (optional offline pass)"
-                        className="block w-full px-4 py-3 bg-white border border-border rounded-xl text-text-main outline-none focus:border-primary text-sm font-medium"
-                      />
-                    </div>
-
-                    <button
-                      type="submit"
-                      disabled={isLoading}
-                      className="w-full py-3.5 bg-primary text-white rounded-xl font-bold flex items-center justify-center gap-2 text-sm shadow-md transition hover:bg-primary/95"
-                    >
-                      {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Log In & Authenticate'}
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setShowAddGoogleForm(false)}
-                      className="w-full py-3.5 bg-white border border-border text-text-secondary text-xs rounded-xl font-bold hover:bg-hover transition"
-                    >
-                      Back to account list
-                    </button>
-                  </form>
-                )}
+            {/* STANDARD EMAIL/PASSWORD LOGIN LAYER */}
+            <div className="animate-in fade-in">
+              <div className="mb-10 text-center lg:text-left">
+                <h2 className="text-4xl font-display font-bold text-text-main mb-3">
+                  {isSignup ? 'Join the Future' : 'Welcome Back'}
+                </h2>
+                <p className="text-text-secondary text-sm font-medium">
+                  {isSignup ? 'Create your digital library account' : 'Sign in to access your library'}
+                </p>
               </div>
-            ) : (
-              /* STANDARD EMAIL/PASSWORD LOGIN LAYER */
-              <div className="animate-in fade-in">
-                <div className="mb-10 text-center lg:text-left">
-                  <h2 className="text-4xl font-display font-bold text-text-main mb-3">
-                    {isSignup ? 'Join the Future' : 'Welcome Back'}
-                  </h2>
-                  <p className="text-text-secondary text-sm font-medium">
-                    {isSignup ? 'Create your digital library account' : 'Sign in to access your library'}
-                  </p>
+
+              <form className="space-y-5" onSubmit={isSignup ? handleSignup : handleLogin}>
+                {error && (
+                  <div className="bg-error/10 border border-error/20 text-error text-xs rounded-xl p-4 flex items-center gap-3 animate-in fade-in slide-in-from-top-1">
+                    <div className="w-2 h-2 rounded-full bg-error animate-pulse" />
+                    <span className="font-bold tracking-wider">{error}</span>
+                  </div>
+                )}
+
+                {isSignup && (
+                  <>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted ml-0.5">Full Name</label>
+                      <div className="relative">
+                        <UserIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
+                        <input
+                          type="text"
+                          required
+                          value={fullName}
+                          onChange={(e) => setFullName(e.target.value)}
+                          className="block w-full pl-11 pr-4 py-3.5 bg-white border border-border rounded-2xl text-text-main placeholder-text-muted transition-all focus:ring-4 focus:ring-primary/10 focus:border-primary outline-none sm:text-sm"
+                          placeholder="Ibrahim"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted ml-0.5">Class / Level</label>
+                      <div className="relative">
+                        <BookOpen className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
+                        <input
+                          type="text"
+                          required
+                          value={className}
+                          onChange={(e) => setClassName(e.target.value)}
+                          className="block w-full pl-11 pr-4 py-3.5 bg-white border border-border rounded-2xl text-text-main placeholder-text-muted transition-all focus:ring-4 focus:ring-primary/10 focus:border-primary outline-none sm:text-sm"
+                          placeholder="University Level"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted ml-0.5">Account Type</label>
+                      <div className="relative">
+                        <ShieldCheck className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
+                        <select
+                          value={role}
+                          onChange={(e) => setRole(e.target.value as Role)}
+                          className="block w-full pl-11 pr-4 py-3.5 bg-white border border-border rounded-2xl text-text-main transition-all focus:ring-4 focus:ring-primary/10 focus:border-primary outline-none sm:text-sm appearance-none cursor-pointer"
+                          required
+                        >
+                          <option value="student" className="bg-white">Student</option>
+                          <option value="teacher" className="bg-white">Teacher</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {role === 'teacher' && (
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted ml-0.5">Teacher Access Code</label>
+                        <div className="relative">
+                          <Key className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
+                          <input
+                            type="password"
+                            required
+                            value={accessCode}
+                            onChange={(e) => setAccessCode(e.target.value)}
+                            className="block w-full pl-11 pr-4 py-3.5 bg-white border border-border rounded-2xl text-text-main placeholder-text-muted transition-all focus:ring-4 focus:ring-primary/10 focus:border-primary outline-none sm:text-sm"
+                            placeholder="••••••••"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted ml-0.5">Username / Email</label>
+                  <div className="relative">
+                    <UserIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
+                    <input
+                      type="text"
+                      required
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
+                      className="block w-full pl-11 pr-4 py-3.5 bg-white border border-border rounded-2xl text-text-main placeholder-text-muted transition-all focus:ring-4 focus:ring-primary/10 focus:border-primary outline-none sm:text-sm font-medium"
+                      placeholder="username"
+                    />
+                  </div>
                 </div>
 
-                <form className="space-y-5" onSubmit={isSignup ? handleSignup : handleLogin}>
-                  {error && (
-                    <div className="bg-error/10 border border-error/20 text-error text-xs rounded-xl p-4 flex items-center gap-3 animate-in fade-in slide-in-from-top-1">
-                      <div className="w-2 h-2 rounded-full bg-error animate-pulse" />
-                      <span className="font-bold tracking-wider">{error}</span>
-                    </div>
-                  )}
-
-                  <button
-                    type="button"
-                    onClick={() => setShowGoogleChooser(true)}
-                    disabled={isLoading}
-                    className="w-full py-4 bg-white border border-border text-text-main rounded-2xl font-bold flex items-center justify-center gap-3 transition-all hover:bg-hover active:scale-[0.98] shadow-sm mb-6 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5" alt="Google" />
-                    <span>In-App Google Authorization</span>
-                  </button>
-
-                  <div className="relative flex items-center gap-4 py-2">
-                    <div className="flex-grow h-px bg-border" />
-                    <span className="text-[10px] font-bold text-text-muted uppercase tracking-widest bg-white px-2">or credentials</span>
-                    <div className="flex-grow h-px bg-border" />
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted ml-0.5">Password</label>
+                  <div className="relative">
+                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
+                    <input
+                      type="password"
+                      required
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="block w-full pl-11 pr-4 py-3.5 bg-white border border-border rounded-2xl text-text-main placeholder-text-muted transition-all focus:ring-4 focus:ring-primary/10 focus:border-primary outline-none sm:text-sm font-medium"
+                      placeholder="••••••••"
+                    />
                   </div>
+                </div>
 
-                  {isSignup && (
-                    <>
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted ml-0.5">Full Name</label>
-                        <div className="relative">
-                          <UserIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
-                          <input
-                            type="text"
-                            required
-                            value={fullName}
-                            onChange={(e) => setFullName(e.target.value)}
-                            className="block w-full pl-11 pr-4 py-3.5 bg-white border border-border rounded-2xl text-text-main placeholder-text-muted transition-all focus:ring-4 focus:ring-primary/10 focus:border-primary outline-none sm:text-sm"
-                            placeholder="Ibrahim"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted ml-0.5">Class / Level</label>
-                        <div className="relative">
-                          <BookOpen className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
-                          <input
-                            type="text"
-                            required
-                            value={className}
-                            onChange={(e) => setClassName(e.target.value)}
-                            className="block w-full pl-11 pr-4 py-3.5 bg-white border border-border rounded-2xl text-text-main placeholder-text-muted transition-all focus:ring-4 focus:ring-primary/10 focus:border-primary outline-none sm:text-sm"
-                            placeholder="University Level"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted ml-0.5">Account Type</label>
-                        <div className="relative">
-                          <ShieldCheck className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
-                          <select
-                            value={role}
-                            onChange={(e) => setRole(e.target.value as Role)}
-                            className="block w-full pl-11 pr-4 py-3.5 bg-white border border-border rounded-2xl text-text-main transition-all focus:ring-4 focus:ring-primary/10 focus:border-primary outline-none sm:text-sm appearance-none cursor-pointer"
-                            required
-                          >
-                            <option value="student" className="bg-white">Student</option>
-                            <option value="teacher" className="bg-white">Teacher</option>
-                          </select>
-                        </div>
-                      </div>
-
-                      {role === 'teacher' && (
-                        <div className="space-y-2">
-                          <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted ml-0.5">Teacher Access Code</label>
-                          <div className="relative">
-                            <Key className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
-                            <input
-                              type="password"
-                              required
-                              value={accessCode}
-                              onChange={(e) => setAccessCode(e.target.value)}
-                              className="block w-full pl-11 pr-4 py-3.5 bg-white border border-border rounded-2xl text-text-main placeholder-text-muted transition-all focus:ring-4 focus:ring-primary/10 focus:border-primary outline-none sm:text-sm"
-                              placeholder="••••••••"
-                            />
-                          </div>
-                        </div>
-                      )}
-                    </>
-                  )}
-
+                {isSignup && (
                   <div className="space-y-2">
-                    <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted ml-0.5">Username / Email</label>
-                    <div className="relative">
-                      <UserIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
-                      <input
-                        type="text"
-                        required
-                        value={username}
-                        onChange={(e) => setUsername(e.target.value)}
-                        className="block w-full pl-11 pr-4 py-3.5 bg-white border border-border rounded-2xl text-text-main placeholder-text-muted transition-all focus:ring-4 focus:ring-primary/10 focus:border-primary outline-none sm:text-sm font-medium"
-                        placeholder="username"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted ml-0.5">Password</label>
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted ml-0.5">Confirm Password</label>
                     <div className="relative">
                       <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
                       <input
                         type="password"
                         required
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
                         className="block w-full pl-11 pr-4 py-3.5 bg-white border border-border rounded-2xl text-text-main placeholder-text-muted transition-all focus:ring-4 focus:ring-primary/10 focus:border-primary outline-none sm:text-sm font-medium"
                         placeholder="••••••••"
                       />
                     </div>
                   </div>
+                )}
 
-                  {isSignup && (
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted ml-0.5">Confirm Password</label>
-                      <div className="relative">
-                        <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
-                        <input
-                          type="password"
-                          required
-                          value={confirmPassword}
-                          onChange={(e) => setConfirmPassword(e.target.value)}
-                          className="block w-full pl-11 pr-4 py-3.5 bg-white border border-border rounded-2xl text-text-main placeholder-text-muted transition-all focus:ring-4 focus:ring-primary/10 focus:border-primary outline-none sm:text-sm font-medium"
-                          placeholder="••••••••"
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="pt-4">
-                    <button
-                      type="submit"
-                      disabled={isLoading}
-                      className="w-full py-4 bg-gradient-to-r from-primary to-secondary text-white rounded-2xl font-bold flex items-center justify-center gap-3 transition-all shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] group"
-                    >
-                      {isLoading ? (
-                        <Loader2 className="w-5 h-5 animate-spin" />
-                      ) : (
-                        <>
-                          <span className="group-hover:translate-x-1 transition-transform">{isSignup ? 'Create Local/Cloud Account' : 'Sign In'}</span>
-                          <Key className="w-4 h-4 opacity-50" />
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </form>
-
-                <div className="mt-8 text-center">
-                  <button 
-                    onClick={() => {
-                      setIsSignup(!isSignup);
-                      setError('');
-                    }}
-                    className="text-sm font-bold text-text-secondary hover:text-primary transition-colors hover:underline"
+                <div className="pt-4">
+                  <button
+                    type="submit"
+                    disabled={isLoading}
+                    className="w-full py-4 bg-gradient-to-r from-primary to-secondary text-white rounded-2xl font-bold flex items-center justify-center gap-3 transition-all shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] group"
                   >
-                    {isSignup ? (
-                      <>Already have an account? <span className="text-primary">Sign In</span></>
+                    {isLoading ? (
+                      <Loader2 className="w-5 h-5 animate-spin" />
                     ) : (
-                      <>Don't have an account? <span className="text-primary">Create one</span></>
+                      <>
+                        <span className="group-hover:translate-x-1 transition-transform">{isSignup ? 'Create Local/Cloud Account' : 'Sign In'}</span>
+                        <Key className="w-4 h-4 opacity-50" />
+                      </>
                     )}
                   </button>
                 </div>
+              </form>
+
+              <div className="mt-8 text-center">
+                <button 
+                  onClick={() => {
+                    setIsSignup(!isSignup);
+                    setError('');
+                  }}
+                  className="text-sm font-bold text-text-secondary hover:text-primary transition-colors hover:underline"
+                >
+                  {isSignup ? (
+                    <>Already have an account? <span className="text-primary">Sign In</span></>
+                  ) : (
+                    <>Don't have an account? <span className="text-primary">Create one</span></>
+                  )}
+                </button>
               </div>
-            )}
+            </div>
           </div>
 
           {/* Connection & Storage Indicator */}
