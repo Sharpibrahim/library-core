@@ -5,6 +5,7 @@ import fs from "fs";
 import cors from "cors";
 import Database from "better-sqlite3";
 import { Storage } from '@google-cloud/storage';
+import admin from "firebase-admin";
 
 // Handle ESM/CJS compatibility for better-sqlite3
 const BetterSqlite3 = (Database as any).default || Database;
@@ -2195,6 +2196,50 @@ async function startServer() {
       process.exit(0);
     });
   });
+
+  // Reconcile and provision the overall administrator account in Cloud Auth
+  try {
+    const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
+    if (fs.existsSync(configPath)) {
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      if (config.projectId) {
+        if (admin.apps.length === 0) {
+          admin.initializeApp({
+            credential: admin.credential.applicationDefault(),
+            projectId: config.projectId,
+          });
+        }
+        
+        const adminEmail = 'sharpibrah@gmail.com';
+        const adminPassword = 'SunnyDay@2026';
+        const adminDisplayName = 'Sharp White';
+
+        console.log(`[ADMIN-AUTH] Ensuring administrator user '${adminEmail}' exists in Cloud Authentication...`);
+        try {
+          const userRecord = await admin.auth().getUserByEmail(adminEmail);
+          await admin.auth().updateUser(userRecord.uid, {
+            password: adminPassword,
+            displayName: adminDisplayName,
+          });
+          console.log(`[ADMIN-AUTH] Successfully verified and aligned overall admin authentication details.`);
+        } catch (authErr: any) {
+          if (authErr.code === 'auth/user-not-found') {
+            const newUserRecord = await admin.auth().createUser({
+              email: adminEmail,
+              password: adminPassword,
+              displayName: adminDisplayName,
+              emailVerified: true
+            });
+            console.log(`[ADMIN-AUTH] Successfully created overall admin account in Cloud Auth with UID: ${newUserRecord.uid}`);
+          } else {
+            console.error('[ADMIN-AUTH] Error checking admin account:', authErr);
+          }
+        }
+      }
+    }
+  } catch (err: any) {
+    console.error('[ADMIN-AUTH] Could not reconcile admin account in Cloud Run container:', err.message);
+  }
 }
 
 startServer().catch(err => {

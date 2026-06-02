@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { TrendingUp, Users, Book, FileText, PenTool } from 'lucide-react';
 import { motion } from 'motion/react';
-import { db, handleFirestoreError, OperationType } from '../firebase';
+import { auth, db, handleFirestoreError, OperationType } from '../firebase';
 import { collection, onSnapshot } from 'firebase/firestore';
 
 export function StatCards() {
@@ -13,6 +13,35 @@ export function StatCards() {
   });
 
   useEffect(() => {
+    // If not logged in, fetch from local Fallback APIs to avoid Permission Denied
+    if (!auth.currentUser) {
+      // Fetch resources
+      fetch('/api/resources')
+        .then(res => res.ok ? res.json() : [])
+        .then(docs => {
+          setStatsData(prev => ({
+            ...prev,
+            books: docs.filter((d: any) => d.type === 'book').length,
+            pastpapers: docs.filter((d: any) => d.type === 'past_paper').length,
+            notes: docs.filter((d: any) => d.type === 'note').length,
+          }));
+        })
+        .catch(err => console.warn('Failed to get offline resources for StatCards:', err));
+
+      // Fetch users
+      fetch('/api/admin/users')
+        .then(res => res.ok ? res.json() : [])
+        .then(docs => {
+          setStatsData(prev => ({
+            ...prev,
+            students: docs.filter((d: any) => d.role === 'student').length
+          }));
+        })
+        .catch(err => console.warn('Failed to get offline users for StatCards:', err));
+
+      return;
+    }
+
     // Listen to resources
     const unsubResources = onSnapshot(collection(db, 'resources'), (snapshot) => {
       const docs = snapshot.docs.map(doc => doc.data());
@@ -23,7 +52,7 @@ export function StatCards() {
         notes: docs.filter(d => d.type === 'note').length,
       }));
     }, (error) => {
-      console.error('Failed to snapshot resources in StatCards:', error);
+      console.warn('Blocked snapshot of resources in StatCards:', error.message);
     });
 
     // Listen to users for students count
@@ -34,7 +63,7 @@ export function StatCards() {
         students: docs.filter(d => d.role === 'student').length
       }));
     }, (error) => {
-      console.error('Failed to snapshot users in StatCards:', error);
+      console.warn('Blocked snapshot of users in StatCards:', error.message);
     });
 
     return () => {
