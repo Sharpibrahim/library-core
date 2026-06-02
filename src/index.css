@@ -170,3 +170,75 @@ select, option {
   background-color: #ffffff !important;
   color: #1e293b !important;
 }
+
+/* Redefine variables for dark theme to map automatically */
+.dark {
+  --color-background: #090e1a !important; 
+  --color-section: #131c2e !important;    
+  --color-surface: #121a2a !important;    
+  --color-hover: #1c273e !important;      
+  
+  --color-text-main: #f8fafc !important;  
+  --color-text-secondary: #94a3b8 !important; 
+  --color-text-muted: #64748b !important;
+  
+  --color-border: #1e293b !important;     
+  --color-divider: #131c2e !important;
+}
+
+/* Fallbacks to overwrite hardcoded utility classes in dark mode */
+.dark .bg-white {
+  background-color: var(--color-surface) !important;
+}
+
+.dark .bg-slate-50,
+.dark .bg-gray-50,
+.dark .bg-slate-50\/50,
+.dark .bg-gray-50\/50 {
+  background-color: var(--color-section) !important;
+}
+
+.dark .bg-\[\#F8FAFC\],
+.dark .bg-\[\#f8fafc\] {
+  background-color: var(--color-background) !important;
+}
+
+.dark .text-slate-950,
+.dark .text-slate-900,
+.dark .text-gray-900,
+.dark .text-gray-800,
+.dark .text-slate-800 {
+  color: var(--color-text-main) !important;
+}
+
+.dark .text-slate-700,
+.dark .text-gray-750,
+.dark .text-gray-700,
+.dark .text-gray-600,
+.dark .text-slate-600 {
+  color: var(--color-text-secondary) !important;
+}
+
+.dark .text-slate-400,
+.dark .text-gray-400,
+.dark .text-text-muted {
+  color: var(--color-text-muted) !important;
+}
+
+.dark .border-gray-50,
+.dark .border-gray-100,
+.dark .border-slate-100,
+.dark .border-slate-200,
+.dark .border-violet-100,
+.dark .border-violet-100\/50,
+.dark .border-border {
+  border-color: var(--color-border) !important;
+}
+
+.dark .shadow-xl, 
+.dark .shadow-lg,
+.dark .shadow-md,
+.dark .shadow-sm {
+  box-shadow: none !important;
+}
+
