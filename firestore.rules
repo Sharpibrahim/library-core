@@ -67,16 +67,14 @@ service cloud.firestore {
 
     function isValidMessage(data) {
       return data.keys().hasAll(['senderId', 'content', 'timestamp']) &&
-             data.senderId == request.auth.uid &&
              data.content is string && data.content.size() <= 5000;
     }
 
     function isValidNotification(data) {
-      return data.keys().hasAll(['userId', 'title', 'message', 'type', 'read', 'createdAt']) &&
-             data.userId == request.auth.uid &&
+      return data.keys().hasAll(['userId', 'title', 'message', 'type', 'read']) &&
              data.title is string && data.title.size() <= 200 &&
              data.message is string && data.message.size() <= 1000 &&
-             data.type in ['info', 'success', 'warning', 'error'] &&
+             data.type in ['info', 'success', 'warning', 'error', 'alert'] &&
              data.read is bool;
     }
 
@@ -143,8 +141,8 @@ service cloud.firestore {
     match /notifications/{notificationId} {
       allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
       allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
-      allow create: if isSignedIn() && incoming().userId == request.auth.uid && isValidNotification(incoming());
-      allow update: if isSignedIn() && existing().userId == request.auth.uid && isValidNotification(incoming()) && (
+      allow create: if isSignedIn() && (incoming().userId == request.auth.uid || isAdmin() || isTeacher()) && isValidNotification(incoming());
+      allow update: if isSignedIn() && existing().userId == request.auth.uid && (
         incoming().diff(existing()).affectedKeys().hasOnly(['read'])
       );
       allow delete: if isSignedIn() && existing().userId == request.auth.uid;
@@ -174,13 +172,31 @@ service cloud.firestore {
         }
         
         allow get, list: if isSignedIn() && (request.auth.uid in conversationData().participants);
-        allow create: if isSignedIn() && (request.auth.uid in conversationData().participants) && isValidMessage(incoming());
+        allow create: if isSignedIn() && 
+                         (request.auth.uid in conversationData().participants) && 
+                         isValidMessage(incoming()) && 
+                         (incoming().senderId == request.auth.uid || incoming().senderId in conversationData().participants);
       }
     }
 
     match /activityLog/{logId} {
       allow get, list: if isSignedIn();
       allow create: if isSignedIn() && incoming().userId == request.auth.uid;
+    }
+
+    // ===============================================================
+    // CLASSROOMS (LIVE CHAT & PRESENCE)
+    // ===============================================================
+    match /classrooms/{classroomId} {
+      allow read, write: if isSignedIn();
+
+      match /messages/{messageId} {
+        allow read, write: if isSignedIn();
+      }
+
+      match /participants/{participantId} {
+        allow read, write: if isSignedIn();
+      }
     }
   }
 }

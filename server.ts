@@ -1193,16 +1193,56 @@ app.delete('/api/lessons/:id', (req, res) => {
 });
 
 // Enrollment & Progress
+app.get('/api/users/:userId/enrollments', (req, res) => {
+  try {
+    const { userId } = req.params;
+    
+    // Look up user to resolve fully
+    let userRow = db.prepare('SELECT * FROM users WHERE uid = ?').get(userId) as any;
+    if (!userRow) {
+      userRow = db.prepare('SELECT * FROM users WHERE id = ?').get(Number(userId) || 0) as any;
+    }
+
+    if (!userRow) {
+      return res.json([]);
+    }
+
+    const enrollments = db.prepare(`
+      SELECT * FROM enrollments WHERE user_id = ? OR user_uid = ?
+    `).all(userRow.id, userRow.uid);
+    res.json(enrollments);
+  } catch (error) {
+    console.error('Failed to fetch enrollments:', error);
+    res.status(500).json({ error: 'Failed to fetch enrollments' });
+  }
+});
+
 app.post('/api/courses/:id/enroll', (req, res) => {
   try {
     const { id } = req.params;
-    const { userId } = req.body;
-    const exists = db.prepare(`SELECT id FROM enrollments WHERE course_id = ? AND user_id = ?`).get(id, userId);
+    const { userId, userUid } = req.body;
+    
+    let resolvedUserId = userId;
+    let resolvedUserUid = userUid;
+    const identifier = userId || userUid;
+    if (identifier) {
+      let userRow = db.prepare('SELECT * FROM users WHERE uid = ?').get(String(identifier)) as any;
+      if (!userRow) {
+        userRow = db.prepare('SELECT * FROM users WHERE id = ?').get(Number(identifier) || 0) as any;
+      }
+      if (userRow) {
+        resolvedUserId = userRow.id;
+        resolvedUserUid = userRow.uid;
+      }
+    }
+
+    const exists = db.prepare(`SELECT id FROM enrollments WHERE course_id = ? AND (user_id = ? OR user_uid = ?)`).get(id, resolvedUserId || null, resolvedUserUid || null);
     if (!exists) {
-      db.prepare(`INSERT INTO enrollments (course_id, user_id) VALUES (?, ?)`).run(id, userId);
+      db.prepare(`INSERT INTO enrollments (course_id, user_id, user_uid) VALUES (?, ?, ?)`).run(id, resolvedUserId || null, resolvedUserUid || null);
     }
     res.json({ success: true });
   } catch (error) {
+    console.error('Failed to enroll student:', error);
     res.status(500).json({ error: 'Failed to enroll in course' });
   }
 });
@@ -1210,14 +1250,25 @@ app.post('/api/courses/:id/enroll', (req, res) => {
 app.get('/api/courses/:id/progress/:userId', (req, res) => {
   try {
     const { id, userId } = req.params;
+    
+    let userRow = db.prepare('SELECT * FROM users WHERE uid = ?').get(userId) as any;
+    if (!userRow) {
+      userRow = db.prepare('SELECT * FROM users WHERE id = ?').get(Number(userId) || 0) as any;
+    }
+    
+    if (!userRow) {
+      return res.json([]);
+    }
+
     const progress = db.prepare(`
       SELECT lp.* FROM lesson_progress lp
       JOIN course_lessons cl ON lp.lesson_id = cl.id
       JOIN course_sections cs ON cl.section_id = cs.id
-      WHERE cs.course_id = ? AND lp.user_id = ? AND lp.completed = 1
-    `).all(id, userId);
+      WHERE cs.course_id = ? AND (lp.user_id = ? OR lp.user_uid = ?) AND lp.completed = 1
+    `).all(id, userRow.id, userRow.uid);
     res.json(progress);
   } catch (error) {
+    console.error('Failed to fetch course progress:', error);
     res.status(500).json({ error: 'Failed to fetch course progress' });
   }
 });
@@ -1227,14 +1278,24 @@ app.post('/api/lessons/:id/progress', (req, res) => {
     const { id } = req.params; // lesson_id
     const { userId, completed } = req.body;
     
-    const exists = db.prepare(`SELECT id FROM lesson_progress WHERE lesson_id = ? AND user_id = ?`).get(id, userId);
+    let userRow = db.prepare('SELECT * FROM users WHERE uid = ?').get(userId) as any;
+    if (!userRow) {
+      userRow = db.prepare('SELECT * FROM users WHERE id = ?').get(Number(userId) || 0) as any;
+    }
+
+    if (!userRow) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const exists = db.prepare(`SELECT id FROM lesson_progress WHERE lesson_id = ? AND (user_id = ? OR user_uid = ?)`).get(id, userRow.id, userRow.uid);
     if (exists) {
-      db.prepare(`UPDATE lesson_progress SET completed = ?, updated_at = CURRENT_TIMESTAMP WHERE lesson_id = ? AND user_id = ?`).run(completed ? 1 : 0, id, userId);
+      db.prepare(`UPDATE lesson_progress SET completed = ?, updated_at = CURRENT_TIMESTAMP WHERE lesson_id = ? AND (user_id = ? OR user_uid = ?)`).run(completed ? 1 : 0, id, userRow.id, userRow.uid);
     } else {
-      db.prepare(`INSERT INTO lesson_progress (lesson_id, user_id, completed) VALUES (?, ?, ?)`).run(id, userId, completed ? 1 : 0);
+      db.prepare(`INSERT INTO lesson_progress (lesson_id, user_id, user_uid, completed) VALUES (?, ?, ?, ?)`).run(id, userRow.id, userRow.uid, completed ? 1 : 0);
     }
     res.json({ success: true });
   } catch (error) {
+    console.error('Failed to update lesson progress:', error);
     res.status(500).json({ error: 'Failed to update lesson progress' });
   }
 });

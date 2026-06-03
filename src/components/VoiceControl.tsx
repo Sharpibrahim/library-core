@@ -196,7 +196,7 @@ export function VoiceControl({
       }
     }
 
-    if (cmd.includes('dashboard') || cmd.includes('home')) {
+    if (cmd.includes('dashboard') || cmd.includes('home') || cmd.includes('study-tracker') || cmd.includes('deep tracker') || cmd.includes('study tracker') || cmd.includes('tracker') || cmd.includes('gpa') || cmd.includes('performance') || cmd.includes('gradebook') || cmd.includes('grades')) {
       onNavigate('dashboard');
       triggerFeedback('Navigating to Dashboard');
     } else if (cmd.includes('library') || cmd.includes('books')) {
@@ -208,9 +208,6 @@ export function VoiceControl({
     } else if (cmd.includes('classroom') || cmd.includes('class') || cmd.includes('school')) {
       onNavigate('classrooms');
       triggerFeedback('Opening Classrooms');
-    } else if (cmd.includes('study-tracker') || cmd.includes('deep tracker') || cmd.includes('study tracker') || cmd.includes('tracker') || cmd.includes('gpa') || cmd.includes('performance') || cmd.includes('gradebook') || cmd.includes('grades')) {
-      onNavigate('study-tracker');
-      triggerFeedback('Opening Deep Study Tracker');
     } else if (cmd.includes('quizzes') || cmd.includes('exam') || cmd.includes('test') || cmd.includes('assessment')) {
       onNavigate('quizzes');
       triggerFeedback('Opening Assessments');

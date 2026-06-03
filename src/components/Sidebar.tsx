@@ -42,7 +42,6 @@ const MENU_ITEMS = [
   { id: 'courses', label: 'Elite Courses', icon: BookOpen },
   { id: 'quizzes', label: 'Quiz Master', icon: Trophy, sparkles: true },
   { id: 'classrooms', label: 'Classrooms', icon: Users },
-  { id: 'study-tracker', label: 'Deep Tracker', icon: Clock, sparkles: true },
   { id: 'notifications', label: 'Notifications', icon: Bell },
   { id: 'messages', label: 'Expert Chat', icon: MessageSquare, badge: true },
   { id: 'ai-assistant', label: 'AI Assistant', icon: Bot },

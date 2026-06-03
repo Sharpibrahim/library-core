@@ -40,7 +40,6 @@ import { ClassroomList } from './components/ClassroomList';
 import { Course } from './types';
 import { QuizzesView } from './components/QuizzesView';
 import { ExpertChatView } from './components/ExpertChatView';
-import { DeepStudyTracker } from './components/DeepStudyTracker';
 import { VoiceControl } from './components/VoiceControl';
 import { CommandPalette } from './components/CommandPalette';
 import { NotificationCenter } from './components/NotificationCenter';
@@ -352,7 +351,7 @@ export default function App() {
             } else {
               const fullUser = {
                 ...userData,
-                avatarUrl: userData.avatarUrl || firebaseUser.photoURL || undefined
+                avatarUrl: userData.avatarUrl || firebaseUser.photoURL || null
               };
               setCurrentUser(fullUser);
               localStorage.setItem('library_core_current_user', JSON.stringify(fullUser));
@@ -389,8 +388,8 @@ export default function App() {
               class: null,
               role: isAdminEmail ? 'admin' : 'student',
               favoriteSubjects: null,
-              email: firebaseUser.email || undefined,
-              avatarUrl: firebaseUser.photoURL || undefined,
+              email: firebaseUser.email || null,
+              avatarUrl: firebaseUser.photoURL || null,
               contactCode
             };
             await setDoc(userDocRef, newUser);
@@ -786,10 +785,6 @@ export default function App() {
                   onThemeChange={toggleTheme}
                   onUserUpdate={(updatedUser) => setCurrentUser(updatedUser)}
                 />
-              )}
-
-              {activeTab === 'study-tracker' && (
-                <DeepStudyTracker user={currentUser!} />
               )}
 
               {activeTab === 'user-manual' && (
