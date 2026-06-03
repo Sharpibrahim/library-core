@@ -371,7 +371,7 @@ let gcsBucket: any = null;
 try {
   const config = JSON.parse(fs.readFileSync('./firebase-applet-config.json', 'utf8'));
   if (config.storageBucket) {
-    const storage = new Storage({});
+    const storage = new Storage({ projectId: config.projectId });
     gcsBucket = storage.bucket(config.storageBucket);
     console.log(`[STORAGE] Permanent Cloud Storage bucket initialized: ${config.storageBucket}`);
   } else {
@@ -1670,17 +1670,33 @@ app.post('/api/classes', (req, res) => {
 app.get('/api/users/:userId/classes', (req, res) => {
   try {
     const { userId } = req.params;
-    
-    // Fetch classes created/taught by user OR joined as a student
-    const classes = db.prepare(`
-      SELECT DISTINCT c.*,
-        (SELECT COUNT(*) FROM class_students cs2 WHERE cs2.class_id = c.id) as student_count
-      FROM classes c 
-      LEFT JOIN class_students cs ON c.id = cs.class_id 
-      WHERE c.teacher_uid = ? OR c.teacher_id = ? 
-         OR cs.student_uid = ? OR cs.student_id = ?
-      ORDER BY c.created_at DESC
-    `).all(userId, userId, userId, userId);
+    const isFirebaseUid = userId && typeof userId === 'string' && !userId.match(/^\d+$/);
+
+    let classes;
+    if (isFirebaseUid) {
+      // For digital/Firebase students and teachers
+      classes = db.prepare(`
+        SELECT DISTINCT c.*,
+          (SELECT COUNT(*) FROM class_students cs2 WHERE cs2.class_id = c.id) as student_count
+        FROM classes c 
+        LEFT JOIN class_students cs ON c.id = cs.class_id 
+        WHERE c.teacher_uid = ? 
+           OR cs.student_uid = ?
+        ORDER BY c.created_at DESC
+      `).all(userId, userId);
+    } else {
+      // For local SQLite fallback logins
+      const numericId = Number(userId) || 0;
+      classes = db.prepare(`
+        SELECT DISTINCT c.*,
+          (SELECT COUNT(*) FROM class_students cs2 WHERE cs2.class_id = c.id) as student_count
+        FROM classes c 
+        LEFT JOIN class_students cs ON c.id = cs.class_id 
+        WHERE c.teacher_id = ? 
+           OR cs.student_id = ?
+        ORDER BY c.created_at DESC
+      `).all(numericId, numericId);
+    }
     
     res.json(classes);
   } catch (error) {
@@ -1716,7 +1732,18 @@ app.post('/api/classes/join', (req, res) => {
       local_student_id = 999;
     }
 
-    const exists = db.prepare('SELECT * FROM class_students WHERE class_id = ? AND (student_uid = ? OR student_id = ?)').get(cls.id, student_id, local_student_id);
+    // Fully-isolated exists check to avoid fallback collisions with 999 or other hash equivalents
+    let exists = false;
+    const isFirebaseUid = student_id && typeof student_id === 'string' && !student_id.match(/^\d+$/);
+
+    if (isFirebaseUid) {
+      const row = db.prepare('SELECT 1 FROM class_students WHERE class_id = ? AND student_uid = ?').get(cls.id, student_id);
+      if (row) exists = true;
+    } else {
+      const row = db.prepare('SELECT 1 FROM class_students WHERE class_id = ? AND (student_id = ? OR student_uid = ?)').get(cls.id, Number(student_id || local_student_id), student_id);
+      if (row) exists = true;
+    }
+
     if (!exists) {
       db.prepare('INSERT INTO class_students (class_id, student_id, student_uid, student_name) VALUES (?, ?, ?, ?)').run(cls.id, local_student_id, student_id, student_name || 'Student');
     }

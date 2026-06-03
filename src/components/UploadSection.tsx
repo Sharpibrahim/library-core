@@ -25,24 +25,12 @@ export function UploadSection({ user, onUploadComplete }: UploadSectionProps) {
   const [uploadType, setUploadType] = useState<'file' | 'youtube'>('file');
   const [formData, setFormData] = useState({
     title: '',
-    className: 'S1',
+    className: user.class || 'S1',
     category: 'pastpaper',
     subject: 'Mathematics',
     author: user.fullName || user.username,
     description: ''
   });
-
-  if (!isAdmin && !isTeacher) {
-    return (
-      <div className="flex flex-col items-center justify-center py-20 text-center">
-        <div className="w-16 h-16 bg-error/10 text-error rounded-full flex items-center justify-center mb-6">
-          <X className="w-8 h-8" />
-        </div>
-        <h2 className="text-2xl font-display font-bold text-text-main mb-2">Access Restricted</h2>
-        <p className="text-text-secondary max-w-sm mx-auto">Only teachers and administrators can upload content to the library.</p>
-      </div>
-    );
-  }
 
   const CLASSES = ['S1', 'S2', 'S3', 'S4', 'S5', 'S6'];
   const SUBJECTS = [
