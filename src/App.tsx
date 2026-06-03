@@ -47,6 +47,7 @@ import { OnboardingTutorial } from './components/OnboardingTutorial';
 import { UserManualView } from './components/UserManualView';
 import { motion, AnimatePresence } from 'motion/react';
 import { SyncService } from './lib/syncService';
+import { playNotificationSound } from './lib/sounds';
 
 // Beautiful high-fidelity, dual-pitch notification chime sound
 const playChimeNotificationSound = () => {
@@ -198,7 +199,11 @@ export default function App() {
           const now = Date.now();
           const createdAt = data.createdAt?.toMillis ? data.createdAt.toMillis() : now;
           if (!data.read && (now - createdAt < 10000)) {
-            playChimeNotificationSound();
+            const isNotificationsEnabled = currentUser?.masterNotifications ?? true;
+            if (isNotificationsEnabled) {
+              const preferredSound = currentUser?.notificationSound || 'classic';
+              playNotificationSound(preferredSound);
+            }
             setActiveNotification({ id: change.doc.id, ...data } as Notification);
             setTimeout(() => setActiveNotification(null), 5000);
           }

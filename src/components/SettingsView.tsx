@@ -50,8 +50,10 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { User as UserType } from '../types';
-import { db } from '../firebase';
+import { db, auth } from '../firebase';
 import { doc, updateDoc } from 'firebase/firestore';
+import { signOut } from 'firebase/auth';
+import { playNotificationSound, SOUND_OPTIONS, NotificationSoundType } from '../lib/sounds';
 
 interface SettingsViewProps {
   user: UserType;
@@ -78,8 +80,27 @@ export function SettingsView({ user, theme, onThemeChange, onUserUpdate }: Setti
   const [editedUser, setEditedUser] = useState<UserType>({ ...user });
   
   // UI Preferences (Local)
-  const [uiSize, setUiSize] = useState('medium');
-  const [fontSize, setFontSize] = useState(16);
+  const [uiSize, setUiSize] = useState(() => localStorage.getItem('library_core_ui_size') || 'medium');
+  const [fontSize, setFontSize] = useState(() => {
+    const val = localStorage.getItem('library_core_font_size');
+    return val ? parseInt(val) : 16;
+  });
+
+  React.useEffect(() => {
+    localStorage.setItem('library_core_ui_size', uiSize);
+    localStorage.setItem('library_core_font_size', fontSize.toString());
+    const root = document.documentElement;
+    root.style.fontSize = fontSize === 16 ? '' : `${fontSize}px`;
+    if (uiSize === 'small') {
+      root.classList.add('ui-scale-small');
+      root.classList.remove('ui-scale-large');
+    } else if (uiSize === 'large') {
+      root.classList.add('ui-scale-large');
+      root.classList.remove('ui-scale-small');
+    } else {
+      root.classList.remove('ui-scale-small', 'ui-scale-large');
+    }
+  }, [uiSize, fontSize]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -112,21 +133,40 @@ export function SettingsView({ user, theme, onThemeChange, onUserUpdate }: Setti
     }
   };
 
-  const handleSave = async () => {
+  const handleSavePreferences = async (customUserObj?: UserType) => {
     setIsSaving(true);
     setSaveStatus('idle');
+    const userToSave = customUserObj || editedUser;
     try {
       const userRef = doc(db, 'users', user.uid);
-      await updateDoc(userRef, {
-        fullName: editedUser.fullName,
-        email: editedUser.email || '',
-        avatarUrl: editedUser.avatarUrl || (window as any).firebaseUser?.photoURL || ''
+      const updatePayload = {
+        fullName: userToSave.fullName || '',
+        email: userToSave.email || '',
+        avatarUrl: userToSave.avatarUrl || '',
+        notificationSound: userToSave.notificationSound || 'classic',
+        masterNotifications: userToSave.masterNotifications ?? true,
+        assignmentAlerts: userToSave.assignmentAlerts ?? true,
+        readingReminders: userToSave.readingReminders ?? false,
+        classAnnouncements: userToSave.classAnnouncements ?? true,
+        autoResume: userToSave.autoResume ?? true,
+        focusMode: userToSave.focusMode ?? false,
+        cloudSync: userToSave.cloudSync ?? true,
+        notesUi: userToSave.notesUi ?? true,
+        pedagogyLevel: userToSave.pedagogyLevel || 'Detailed (Advanced)',
+        contextTracking: userToSave.contextTracking ?? true,
+        autoSummaries: userToSave.autoSummaries ?? true,
+        dynamicQuizzes: userToSave.dynamicQuizzes ?? true
+      };
+      await updateDoc(userRef, updatePayload);
+      onUserUpdate({
+        ...user,
+        ...userToSave,
+        ...updatePayload
       });
-      onUserUpdate(editedUser);
       setSaveStatus('success');
       setTimeout(() => setSaveStatus('idle'), 3000);
     } catch (error) {
-      console.error('Error updating profile:', error);
+      console.error('Error updating preferences:', error);
       setSaveStatus('error');
     } finally {
       setIsSaving(false);
@@ -235,7 +275,7 @@ export function SettingsView({ user, theme, onThemeChange, onUserUpdate }: Setti
               
               <div className="pt-6 flex justify-end">
                 <button 
-                  onClick={handleSave} 
+                  onClick={() => handleSavePreferences()} 
                   disabled={isSaving}
                   className="px-8 py-3 bg-violet-600 text-white font-bold text-xs uppercase tracking-[0.2em] rounded-xl hover:bg-violet-700 transition-all shadow-xl shadow-violet-600/40 flex items-center gap-3 active:scale-95 disabled:opacity-50"
                 >
@@ -323,28 +363,100 @@ export function SettingsView({ user, theme, onThemeChange, onUserUpdate }: Setti
       case 'notifications':
         return (
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className="bg-white p-4 rounded-2xl border border-violet-100/50 shadow-xl shadow-gray-200/40 space-y-2">
-              {[
-                { id: 'master', label: 'Push Notifications', sub: 'Enable master system-level alerts', icon: Bell, active: true },
-                { id: 'assign', label: 'Assignment Alerts', sub: 'Deadline reminders and grading info', icon: Clock, active: true },
-                { id: 'reading', label: 'Reading Reminders', sub: 'Daily streaks and motivational prompts', icon: BookOpen, active: false },
-                { id: 'announc', label: 'Class Announcements', sub: 'Latest news from enrolled classrooms', icon: Sparkles, active: true },
-              ].map((item) => (
-                <div key={item.id} className="flex items-center justify-between p-5 rounded-2xl hover:bg-gray-50/80 transition-all border border-transparent hover:border-violet-50 group">
-                  <div className="flex items-center gap-5">
-                    <div className={`p-3 rounded-2xl transition-all ${item.active ? 'bg-violet-50 text-violet-600 shadow-sm' : 'bg-gray-50 text-gray-400 group-hover:bg-white border border-gray-100'}`}>
-                      <item.icon className="w-5 h-5" />
+            <div className="bg-white p-6 rounded-2xl border border-violet-100/50 shadow-xl shadow-gray-200/40 space-y-6">
+              <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">Alert Channels</h3>
+              <div className="space-y-2">
+                {[
+                  { id: 'masterNotifications', label: 'Push Notifications', sub: 'Enable master system-level alerts', icon: Bell, active: editedUser.masterNotifications ?? true },
+                  { id: 'assignmentAlerts', label: 'Assignment Alerts', sub: 'Deadline reminders and grading info', icon: Clock, active: editedUser.assignmentAlerts ?? true },
+                  { id: 'readingReminders', label: 'Reading Reminders', sub: 'Daily streaks and motivational prompts', icon: BookOpen, active: editedUser.readingReminders ?? false },
+                  { id: 'classAnnouncements', label: 'Class Announcements', sub: 'Latest news from enrolled classrooms', icon: Sparkles, active: editedUser.classAnnouncements ?? true },
+                ].map((item) => (
+                  <div key={item.id} className="flex items-center justify-between p-5 rounded-2xl hover:bg-gray-50/80 transition-all border border-transparent hover:border-violet-50 group">
+                    <div className="flex items-center gap-5">
+                      <div className={`p-3 rounded-2xl transition-all ${item.active ? 'bg-violet-50 text-violet-600 shadow-sm' : 'bg-gray-50 text-gray-400 group-hover:bg-white border border-gray-100'}`}>
+                        <item.icon className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <p className="font-bold text-sm text-gray-900 tracking-tight">{item.label}</p>
+                        <p className="text-[11px] text-gray-400 font-medium">{item.sub}</p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-bold text-sm text-gray-900 tracking-tight">{item.label}</p>
-                      <p className="text-[11px] text-gray-400 font-medium">{item.sub}</p>
-                    </div>
+                    <button 
+                      onClick={() => setEditedUser(prev => ({ ...prev, [item.id]: !item.active }))}
+                      className={`w-12 h-6 rounded-full p-1 flex items-center transition-all duration-300 ${item.active ? 'bg-violet-600 justify-end' : 'bg-gray-200 justify-start'}`}
+                    >
+                      <motion.div layout transition={{ type: 'spring', damping: 25, stiffness: 300 }} className="w-4 h-4 bg-white rounded-full shadow-lg" />
+                    </button>
                   </div>
-                  <button className={`w-12 h-6 rounded-full p-1.5 flex transition-all duration-500 ${item.active ? 'bg-violet-600 justify-end' : 'bg-gray-200 justify-start'}`}>
-                    <motion.div layout transition={{ type: 'spring', damping: 20, stiffness: 300 }} className="w-3 h-3 bg-white rounded-full shadow-lg" />
-                  </button>
+                ))}
+              </div>
+
+              {/* Sound Customization Section */}
+              <div className="pt-6 border-t border-gray-100/80 space-y-6">
+                <div>
+                  <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1 flex items-center gap-2">
+                    <Volume2 className="w-4 h-4 text-violet-600 animate-pulse" />
+                    Custom Notification Sound
+                  </h3>
+                  <p className="text-[11px] text-gray-400 font-medium">Select your preferred audio tone. Selecting a sound will play a preview tone.</p>
                 </div>
-              ))}
+
+                <div className="grid sm:grid-cols-2 gap-4">
+                  {SOUND_OPTIONS.map((option) => {
+                    const isSelected = (editedUser.notificationSound || 'classic') === option.id;
+                    return (
+                      <div 
+                        key={option.id}
+                        onClick={() => {
+                          setEditedUser(prev => ({ ...prev, notificationSound: option.id }));
+                          playNotificationSound(option.id);
+                        }}
+                        className={`p-5 rounded-2xl border-2 text-left cursor-pointer transition-all duration-300 flex flex-col justify-between h-32 group relative overflow-hidden ${
+                          isSelected 
+                            ? 'border-violet-600 bg-violet-50/20 shadow-lg shadow-violet-600/5' 
+                            : 'border-gray-100 bg-gray-50/30 hover:border-violet-300'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <p className="font-bold text-sm text-slate-900 tracking-tight">{option.label}</p>
+                            <p className="text-[10px] text-slate-400 font-bold leading-tight mt-1 max-w-[155px]">{option.description}</p>
+                          </div>
+                          <button 
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              playNotificationSound(option.id);
+                            }}
+                            className="p-2 rounded-full bg-white hover:bg-violet-600 border border-gray-100 text-gray-400 hover:text-white transition-all shadow-md group-hover:scale-105 select-none"
+                            title="Play Preview"
+                          >
+                            <Volume2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                        {isSelected && (
+                          <span className="text-[9px] bg-violet-600 text-white font-black uppercase tracking-widest px-2 py-0.5 rounded-md w-max font-mono flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
+                            ACTIVE SOUND
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="pt-6 border-t border-gray-100 flex justify-end">
+                <button 
+                  onClick={() => handleSavePreferences()} 
+                  disabled={isSaving}
+                  className="px-8 py-3 bg-violet-600 text-white font-bold text-xs uppercase tracking-[0.2em] rounded-xl hover:bg-violet-700 transition-all shadow-xl shadow-violet-600/40 flex items-center gap-3 active:scale-95 disabled:opacity-50"
+                >
+                  {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                  Save Notification Tones
+                </button>
+              </div>
             </div>
           </div>
         );
@@ -352,26 +464,43 @@ export function SettingsView({ user, theme, onThemeChange, onUserUpdate }: Setti
       case 'reading':
         return (
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className="bg-white p-4 rounded-2xl border border-violet-100/50 shadow-xl shadow-gray-200/40 grid md:grid-cols-2 gap-2">
-              {[
-                { label: 'Auto-resume', sub: 'Instant start logic', enabled: true, icon: RefreshCw },
-                { label: 'Focus Mode', sub: 'Total immersion', enabled: false, icon: EyeOff },
-                { label: 'Cloud Sync', sub: 'Cross-device library', enabled: true, icon: Cloud },
-                { label: 'Notes UI', sub: 'Margin annotations', enabled: true, icon: MessageSquare },
-              ].map((item, i) => (
-                <div key={i} className="flex items-center justify-between p-6 rounded-2xl border border-gray-50 hover:border-sky-100 hover:bg-sky-50/20 transition-all">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <item.icon className={`w-3 h-3 ${item.enabled ? 'text-sky-500' : 'text-gray-300'}`} />
-                      <p className="font-bold text-xs text-gray-900 uppercase tracking-wider">{item.label}</p>
+            <div className="bg-white p-6 rounded-2xl border border-violet-100/50 shadow-xl shadow-gray-200/40 space-y-6">
+              <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">Reader Environment</h3>
+              <div className="grid md:grid-cols-2 gap-4">
+                {[
+                  { id: 'autoResume', label: 'Auto-resume', sub: 'Instant start logic', active: editedUser.autoResume ?? true, icon: RefreshCw },
+                  { id: 'focusMode', label: 'Focus Mode', sub: 'Total immersion', active: editedUser.focusMode ?? false, icon: EyeOff },
+                  { id: 'cloudSync', label: 'Cloud Sync', sub: 'Cross-device library', active: editedUser.cloudSync ?? true, icon: Cloud },
+                  { id: 'notesUi', label: 'Notes UI', sub: 'Margin annotations', active: editedUser.notesUi ?? true, icon: MessageSquare },
+                ].map((item) => (
+                  <div key={item.id} className="flex items-center justify-between p-6 rounded-2xl border border-gray-50 hover:border-sky-100 hover:bg-sky-50/20 transition-all">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <item.icon className={`w-4 h-4 ${item.active ? 'text-sky-500' : 'text-gray-300'}`} />
+                        <p className="font-bold text-xs text-gray-900 uppercase tracking-wider">{item.label}</p>
+                      </div>
+                      <p className="text-[10px] text-gray-400 font-medium">{item.sub}</p>
                     </div>
-                    <p className="text-[10px] text-gray-400 font-medium">{item.sub}</p>
+                    <button 
+                      onClick={() => setEditedUser(prev => ({ ...prev, [item.id]: !item.active }))}
+                      className={`w-10 h-5 rounded-full p-0.5 flex items-center transition-all duration-300 ${item.active ? 'bg-sky-500 justify-end' : 'bg-gray-200 justify-start'}`}
+                    >
+                      <div className="w-4 h-4 bg-white rounded-full shadow-md" />
+                    </button>
                   </div>
-                  <button className={`w-10 h-5 rounded-full p-1 flex transition-all duration-300 ${item.enabled ? 'bg-sky-500 justify-end' : 'bg-gray-200 justify-start'}`}>
-                    <div className="w-3 h-3 bg-white rounded-full shadow-md" />
-                  </button>
-                </div>
-              ))}
+                ))}
+              </div>
+
+              <div className="pt-6 border-t border-gray-100 flex justify-end">
+                <button 
+                  onClick={() => handleSavePreferences()} 
+                  disabled={isSaving}
+                  className="px-8 py-3 bg-violet-600 text-white font-bold text-xs uppercase tracking-[0.2em] rounded-xl hover:bg-violet-700 transition-all shadow-xl shadow-violet-600/40 flex items-center gap-3 active:scale-95 disabled:opacity-50"
+                >
+                  {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                  Save Reader Setup
+                </button>
+              </div>
             </div>
           </div>
         );
@@ -382,11 +511,11 @@ export function SettingsView({ user, theme, onThemeChange, onUserUpdate }: Setti
             <div className="bg-white p-8 rounded-2xl border border-violet-100/50 shadow-xl shadow-gray-200/40 space-y-8">
               <div className="flex flex-col items-center text-center space-y-4 p-8 bg-gradient-to-br from-violet-50 to-sky-50 rounded-3xl border border-white shadow-inner">
                  <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center shadow-xl shadow-violet-200 border border-violet-50">
-                   <Bot className="w-8 h-8 text-violet-600" />
+                    <Bot className="w-8 h-8 text-violet-600" />
                  </div>
                  <div>
-                   <h3 className="text-lg font-bold text-gray-900">Sharp Intelligence</h3>
-                   <p className="text-xs text-gray-500 font-medium">Next-gen educational companion</p>
+                    <h3 className="text-lg font-bold text-gray-900">Sharp Intelligence</h3>
+                    <p className="text-xs text-gray-500 font-medium">Next-gen educational companion</p>
                  </div>
                  <button className="px-6 py-2 bg-violet-600 text-white font-black text-[10px] uppercase tracking-widest rounded-full shadow-lg shadow-violet-600/30">
                    Active Engine
@@ -396,9 +525,13 @@ export function SettingsView({ user, theme, onThemeChange, onUserUpdate }: Setti
               <div className="grid md:grid-cols-2 gap-6">
                 <div className="p-5 bg-gray-50/50 rounded-2xl border border-gray-100 space-y-3">
                   <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Pedagogy Level</label>
-                  <select className="w-full px-4 py-3 border border-gray-100 rounded-xl bg-white text-xs font-bold focus:outline-none focus:ring-2 focus:ring-violet-600 transition-all">
-                    <option>Simple (Beginner)</option>
-                    <option>Detailed (Advanced)</option>
+                  <select 
+                    value={editedUser.pedagogyLevel || 'Detailed (Advanced)'}
+                    onChange={(e) => setEditedUser(prev => ({ ...prev, pedagogyLevel: e.target.value }))}
+                    className="w-full px-4 py-3 border border-gray-100 rounded-xl bg-white text-xs font-bold focus:outline-none focus:ring-2 focus:ring-violet-600 transition-all font-sans"
+                  >
+                    <option value="Simple (Beginner)">Simple (Beginner)</option>
+                    <option value="Detailed (Advanced)">Detailed (Advanced)</option>
                   </select>
                 </div>
                 <div className="p-5 bg-gray-50/50 rounded-2xl border border-gray-100 flex items-center justify-between">
@@ -406,29 +539,46 @@ export function SettingsView({ user, theme, onThemeChange, onUserUpdate }: Setti
                      <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Context Tracking</p>
                      <p className="text-[11px] font-bold text-gray-900">Enhanced Memory</p>
                    </div>
-                   <button className="w-10 h-5 bg-violet-600 rounded-full p-1 flex justify-end">
-                      <div className="w-3 h-3 bg-white rounded-full" />
+                   <button 
+                     onClick={() => setEditedUser(prev => ({ ...prev, contextTracking: !(prev.contextTracking ?? true) }))}
+                     className={`w-10 h-5 rounded-full p-0.5 flex items-center transition-all duration-300 ${(editedUser.contextTracking ?? true) ? 'bg-violet-600 justify-end' : 'bg-gray-200 justify-start'}`}
+                   >
+                      <div className="w-4 h-4 bg-white rounded-full shadow-md" />
                    </button>
                 </div>
               </div>
 
               <div className="space-y-3">
                  {[
-                   { label: 'Auto Summaries', icon: Sparkles, color: 'text-violet-600' },
-                   { label: 'Dynamic Quizzes', icon: Lightbulb, color: 'text-sky-500' }
-                 ].map((tool, i) => (
-                   <div key={i} className="flex items-center justify-between p-5 bg-white border border-gray-100 rounded-2xl hover:border-violet-200 transition-all shadow-sm">
-                      <div className="flex items-center gap-4">
-                        <div className={`p-2 rounded-lg bg-gray-50 ${tool.color}`}>
-                          <tool.icon className="w-4 h-4" />
-                        </div>
-                        <span className="text-sm font-bold text-gray-800">{tool.label}</span>
-                      </div>
-                      <div className="w-10 h-5 bg-violet-600 rounded-full p-1 flex justify-end">
-                        <div className="w-3 h-3 bg-white rounded-full" />
-                      </div>
-                   </div>
+                   { id: 'autoSummaries', label: 'Auto Summaries', icon: Sparkles, color: 'text-violet-600', active: editedUser.autoSummaries ?? true },
+                   { id: 'dynamicQuizzes', label: 'Dynamic Quizzes', icon: Lightbulb, color: 'text-sky-500', active: editedUser.dynamicQuizzes ?? true }
+                 ].map((tool) => (
+                    <div key={tool.id} className="flex items-center justify-between p-5 bg-white border border-gray-100 rounded-2xl hover:border-violet-200 transition-all shadow-sm">
+                       <div className="flex items-center gap-4">
+                         <div className={`p-2 rounded-lg bg-gray-50 ${tool.color}`}>
+                           <tool.icon className="w-4 h-4" />
+                         </div>
+                         <span className="text-sm font-bold text-gray-800">{tool.label}</span>
+                       </div>
+                       <button 
+                         onClick={() => setEditedUser(prev => ({ ...prev, [tool.id]: !tool.active }))}
+                         className={`w-10 h-5 rounded-full p-0.5 flex items-center transition-all duration-300 ${tool.active ? 'bg-violet-600 justify-end' : 'bg-gray-200 justify-start'}`}
+                       >
+                          <div className="w-4 h-4 bg-white rounded-full shadow-md" />
+                       </button>
+                    </div>
                  ))}
+              </div>
+
+              <div className="pt-4 flex justify-end">
+                <button 
+                  onClick={() => handleSavePreferences()} 
+                  disabled={isSaving}
+                  className="px-8 py-3 bg-violet-600 text-white font-bold text-xs uppercase tracking-[0.2em] rounded-xl hover:bg-violet-700 transition-all shadow-xl shadow-violet-600/40 flex items-center gap-3 active:scale-95 disabled:opacity-50"
+                >
+                  {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                  Save AI Learning Strategy
+                </button>
               </div>
             </div>
           </div>
@@ -459,7 +609,7 @@ export function SettingsView({ user, theme, onThemeChange, onUserUpdate }: Setti
                             <p className="font-bold text-sm text-gray-900">Matrix Protection</p>
                             <span className="text-[8px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-400 group-hover:bg-sky-50 group-hover:text-sky-500">2FA</span>
                          </div>
-                         <p className="text-[10px] text-gray-400 font-medium">Multi-factor security</p>
+                         <p className="text-[10px] text-gray-400 font-medium font-sans">Multi-factor security</p>
                        </div>
                     </button>
                  </div>
@@ -477,13 +627,25 @@ export function SettingsView({ user, theme, onThemeChange, onUserUpdate }: Setti
                         <p className="text-[11px] text-gray-400 font-medium">Visible to other students</p>
                       </div>
                    </div>
-                   <button className="w-12 h-6 bg-violet-600 rounded-full p-1.5 flex justify-end">
+                   <button 
+                     onClick={() => setEditedUser(prev => ({ ...prev, class: prev.class ? null : 'active' }))}
+                     className={`w-12 h-6 rounded-full p-1.5 flex transition-all duration-300 ${editedUser.class ? 'bg-violet-600 justify-end' : 'bg-gray-200 justify-start'}`}
+                   >
                       <div className="w-3 h-3 bg-white rounded-full shadow-lg" />
                    </button>
                 </div>
               </section>
 
-              <button className="w-full py-4 rounded-2xl bg-red-50 text-red-500 font-black text-[10px] uppercase tracking-[0.3em] hover:bg-red-500 hover:text-white transition-all duration-500 shadow-lg shadow-red-200">
+              <button 
+                onClick={async () => {
+                  try {
+                    await signOut(auth);
+                  } catch (e) {
+                    console.error("Failed to signOut:", e);
+                  }
+                }}
+                className="w-full py-4 rounded-2xl bg-red-50 text-red-500 font-black text-[10px] uppercase tracking-[0.3em] hover:bg-red-500 hover:text-white transition-all duration-500 shadow-lg shadow-red-200 select-none cursor-pointer"
+              >
                  Purge Session & Sign Out
               </button>
             </div>

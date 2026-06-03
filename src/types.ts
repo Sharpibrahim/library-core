@@ -13,6 +13,21 @@ export interface User {
   avatarUrl?: string;
   bio?: string;
   school?: string;
+  
+  // Custom user settings
+  notificationSound?: 'classic' | 'crystal' | 'digital' | 'ambient' | 'minimal';
+  masterNotifications?: boolean;
+  assignmentAlerts?: boolean;
+  readingReminders?: boolean;
+  classAnnouncements?: boolean;
+  pedagogyLevel?: string;
+  contextTracking?: boolean;
+  autoSummaries?: boolean;
+  dynamicQuizzes?: boolean;
+  autoResume?: boolean;
+  focusMode?: boolean;
+  cloudSync?: boolean;
+  notesUi?: boolean;
 }
 
 export interface DirectMessage {
