@@ -1700,9 +1700,25 @@ app.post('/api/classes/join', (req, res) => {
     try { db.exec('ALTER TABLE class_students ADD COLUMN student_uid TEXT'); } catch(e){}
     try { db.exec('ALTER TABLE class_students ADD COLUMN student_name TEXT'); } catch(e){}
 
-    const exists = db.prepare('SELECT * FROM class_students WHERE class_id = ? AND student_uid = ?').get(cls.id, student_id);
+    let local_student_id = 0;
+    try {
+      const userRow = db.prepare('SELECT id FROM users WHERE uid = ?').get(student_id) as any;
+      if (userRow) {
+        local_student_id = userRow.id;
+      } else {
+        let hash = 0;
+        for (let i = 0; i < (student_id || '').length; i++) {
+          hash = (student_id || '').charCodeAt(i) + ((hash << 5) - hash);
+        }
+        local_student_id = Math.abs(hash) || 999;
+      }
+    } catch (e) {
+      local_student_id = 999;
+    }
+
+    const exists = db.prepare('SELECT * FROM class_students WHERE class_id = ? AND (student_uid = ? OR student_id = ?)').get(cls.id, student_id, local_student_id);
     if (!exists) {
-      db.prepare('INSERT INTO class_students (class_id, student_uid, student_name) VALUES (?, ?, ?)').run(cls.id, student_id, student_name || 'Student');
+      db.prepare('INSERT INTO class_students (class_id, student_id, student_uid, student_name) VALUES (?, ?, ?, ?)').run(cls.id, local_student_id, student_id, student_name || 'Student');
     }
     res.json({ success: true, classId: cls.id });
   } catch (error: any) {
