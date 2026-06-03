@@ -101,7 +101,12 @@ export function Sidebar({ activeTab, setActiveTab, onLogout, isOpen, setIsOpen, 
           {/* Navigation Menu */}
           <nav className="flex-grow px-4 py-2 space-y-1 overflow-y-auto custom-scrollbar">
             <p className="px-4 text-[10px] font-bold uppercase tracking-widest text-text-muted mb-4 ml-1">Main Menu</p>
-            {MENU_ITEMS.map((item) => {
+            {MENU_ITEMS.filter((item) => {
+              if (item.id === 'upload') {
+                return isAdmin || isTeacher;
+              }
+              return true;
+            }).map((item) => {
               const Icon = item.icon;
               const isActive = activeTab === item.id;
               const showBadge = (item as any).badge && hasNewMessage;

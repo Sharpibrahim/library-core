@@ -1670,32 +1670,52 @@ app.post('/api/classes', (req, res) => {
 app.get('/api/users/:userId/classes', (req, res) => {
   try {
     const { userId } = req.params;
-    const isFirebaseUid = userId && typeof userId === 'string' && !userId.match(/^\d+$/);
+    
+    // Look up user by Firebase UID or SQLite auto-increment ID to resolve fully
+    let userRow = db.prepare('SELECT * FROM users WHERE uid = ?').get(userId) as any;
+    if (!userRow) {
+      userRow = db.prepare('SELECT * FROM users WHERE id = ?').get(Number(userId) || 0) as any;
+    }
 
     let classes;
-    if (isFirebaseUid) {
-      // For digital/Firebase students and teachers
+    if (userRow) {
+      // Find classes where user is the teacher or is enrolled in class_students
       classes = db.prepare(`
         SELECT DISTINCT c.*,
           (SELECT COUNT(*) FROM class_students cs2 WHERE cs2.class_id = c.id) as student_count
         FROM classes c 
         LEFT JOIN class_students cs ON c.id = cs.class_id 
         WHERE c.teacher_uid = ? 
-           OR cs.student_uid = ?
-        ORDER BY c.created_at DESC
-      `).all(userId, userId);
-    } else {
-      // For local SQLite fallback logins
-      const numericId = Number(userId) || 0;
-      classes = db.prepare(`
-        SELECT DISTINCT c.*,
-          (SELECT COUNT(*) FROM class_students cs2 WHERE cs2.class_id = c.id) as student_count
-        FROM classes c 
-        LEFT JOIN class_students cs ON c.id = cs.class_id 
-        WHERE c.teacher_id = ? 
+           OR c.teacher_id = ? 
+           OR cs.student_uid = ? 
            OR cs.student_id = ?
         ORDER BY c.created_at DESC
-      `).all(numericId, numericId);
+      `).all(userRow.uid, userRow.id, userRow.uid, userRow.id);
+    } else {
+      // Fallback if user is not synced in SQLite yet (e.g. freshly registered)
+      const isFirebaseUid = userId && typeof userId === 'string' && !userId.match(/^\d+$/);
+      if (isFirebaseUid) {
+        classes = db.prepare(`
+          SELECT DISTINCT c.*,
+            (SELECT COUNT(*) FROM class_students cs2 WHERE cs2.class_id = c.id) as student_count
+          FROM classes c 
+          LEFT JOIN class_students cs ON c.id = cs.class_id 
+          WHERE c.teacher_uid = ? 
+             OR cs.student_uid = ?
+          ORDER BY c.created_at DESC
+        `).all(userId, userId);
+      } else {
+        const numericId = Number(userId) || 0;
+        classes = db.prepare(`
+          SELECT DISTINCT c.*,
+            (SELECT COUNT(*) FROM class_students cs2 WHERE cs2.class_id = c.id) as student_count
+          FROM classes c 
+          LEFT JOIN class_students cs ON c.id = cs.class_id 
+          WHERE c.teacher_id = ? 
+             OR cs.student_id = ?
+          ORDER BY c.created_at DESC
+        `).all(numericId, numericId);
+      }
     }
     
     res.json(classes);

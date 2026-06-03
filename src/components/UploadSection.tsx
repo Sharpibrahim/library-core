@@ -17,6 +17,18 @@ export function UploadSection({ user, onUploadComplete }: UploadSectionProps) {
   const isAdmin = user.role === 'admin';
   const isTeacher = user.role === 'teacher';
 
+  if (!isAdmin && !isTeacher) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-center bg-white rounded-3xl border border-gray-100 p-8 shadow-sm">
+        <div className="w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center mb-6">
+          <X className="w-8 h-8" />
+        </div>
+        <h2 className="text-2xl font-display font-bold text-gray-900 mb-2">Access Restricted</h2>
+        <p className="text-gray-500 max-w-sm mx-auto font-medium">Only teachers and administrators can upload content to the library.</p>
+      </div>
+    );
+  }
+
   const [isUploading, setIsUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [dragActive, setDragActive] = useState(false);
