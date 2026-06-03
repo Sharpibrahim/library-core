@@ -103,45 +103,10 @@ export function UploadSection({ user, onUploadComplete }: UploadSectionProps) {
         fileSize = file.size;
 
         if (isOnline) {
-          // ONLINE: USE BOTH PERMANENT GOOGLE CLOUD STORAGE PERSISTENCE AND FIRESTORE SYNC
-          console.log('[UPLOAD] Uploading file to permanent Cloud Storage using Firebase Client SDK...');
+          console.log('[UPLOAD] Uploading file directly to Express backend server with progress tracking...');
           
-          let uploadSuccess = false;
-          try {
-            const storagePath = `resources/${user.uid}/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.]/g, '_')}`;
-            const storageRef = ref(storage, storagePath);
-            const uploadTask = uploadBytesResumable(storageRef, file);
-
-            const result = await new Promise<{ url: string; size: number }>((resolve, reject) => {
-              uploadTask.on(
-                'state_changed',
-                (snapshot) => {
-                  const progressPercent = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
-                  setProgress(progressPercent);
-                },
-                (error) => {
-                  reject(error);
-                },
-                async () => {
-                  try {
-                    const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
-                    resolve({ url: downloadUrl, size: file.size });
-                  } catch (e) {
-                    reject(e);
-                  }
-                }
-              );
-            });
-
-            fileUrl = result.url;
-            console.log(`[UPLOAD] Firebase Cloud Storage upload successful. URL: ${fileUrl}`);
-            uploadSuccess = true;
-          } catch (storageErr) {
-            console.warn('[UPLOAD] Firebase Storage client upload failed, using Express backend fallback:', storageErr);
-          }
-
-          if (!uploadSuccess) {
-            console.log('[UPLOAD] Uploading file directly to Express backend server...');
+          const result = await new Promise<any>((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
             const localFormData = new FormData();
             localFormData.append('file', file);
             localFormData.append('title', formData.title);
@@ -151,20 +116,40 @@ export function UploadSection({ user, onUploadComplete }: UploadSectionProps) {
             localFormData.append('cover_url', coverUrl);
             localFormData.append('genre', formData.category);
 
-            const serverRes = await fetch('/api/resources', {
-              method: 'POST',
-              body: localFormData
+            // Track upload stream progress accurately
+            xhr.upload.addEventListener('progress', (event) => {
+              if (event.lengthComputable) {
+                const percent = Math.round((event.loaded / event.total) * 100);
+                // Clamp progression at 95% until server-side Firebase upload and SQLite insertion respond
+                setProgress(Math.min(95, percent));
+              }
             });
-            
-            if (!serverRes.ok) {
-              throw new Error('Express backend fallback upload failed.');
-            }
-            const serverData = await serverRes.json();
-            fileUrl = serverData.file_url;
-            console.log(`[UPLOAD] Express server upload fallback successful. URL: ${fileUrl}`);
-          }
 
-          // 1. Write to Firestore for real-time collaboration Sync
+            xhr.addEventListener('load', () => {
+              if (xhr.status >= 200 && xhr.status < 300) {
+                try {
+                  const data = JSON.parse(xhr.responseText);
+                  resolve(data);
+                } catch (err) {
+                  reject(new Error('Invalid JSON response from upload server.'));
+                }
+              } else {
+                reject(new Error(`Server upload failed with status ${xhr.status}: ${xhr.responseText}`));
+              }
+            });
+
+            xhr.addEventListener('error', () => {
+              reject(new Error('Network error during file transmission.'));
+            });
+
+            xhr.open('POST', '/api/resources');
+            xhr.send(localFormData);
+          });
+
+          fileUrl = result.file_url;
+          console.log(`[UPLOAD] Server-side permanent upload successful. URL: ${fileUrl}`);
+
+          // Sync into Firestore for immediate client-side and collaborative stream updates
           await addDoc(collection(db, 'resources'), {
             title: formData.title,
             author: formData.author,
@@ -181,28 +166,8 @@ export function UploadSection({ user, onUploadComplete }: UploadSectionProps) {
             subject: formData.subject,
             uploadedBy: user.uid
           });
-
-          // 2. Synchronize to SQLite for the server-side Catalog, search index and admin views (only duplicate if we didn't already use fallback)
-          if (uploadSuccess) {
-            const syncFormData = new FormData();
-            syncFormData.append('title', formData.title);
-            syncFormData.append('author', formData.author);
-            syncFormData.append('type', type);
-            syncFormData.append('description', formData.description || '');
-            syncFormData.append('cover_url', coverUrl);
-            syncFormData.append('genre', formData.category);
-            syncFormData.append('body_file_url', fileUrl);
-
-            try {
-              await fetch('/api/resources', {
-                method: 'POST',
-                body: syncFormData
-              });
-              console.log('[UPLOAD] SQLite sync successful.');
-            } catch (sqliteErr) {
-              console.error('[UPLOAD] SQLite sync failed (non-critical):', sqliteErr);
-            }
-          }
+          
+          setProgress(100);
         } else {
           // OFFLINE: Queue using our high-fidelity SyncService
           console.log('[UPLOAD] Device offline. Enqueuing file upload to background queue...');
@@ -248,6 +213,25 @@ export function UploadSection({ user, onUploadComplete }: UploadSectionProps) {
 
         if (isOnline) {
           await addDoc(collection(db, 'resources'), videoPayload);
+          
+          // Sync with Express backend SQLite database for full uniform state
+          const syncFormData = new FormData();
+          syncFormData.append('title', formData.title);
+          syncFormData.append('author', formData.author);
+          syncFormData.append('type', 'video');
+          syncFormData.append('description', formData.description || '');
+          syncFormData.append('cover_url', coverUrl);
+          syncFormData.append('genre', 'video');
+          syncFormData.append('body_file_url', youtubeUrl);
+
+          try {
+            await fetch('/api/resources', {
+              method: 'POST',
+              body: syncFormData
+            });
+          } catch (err) {
+            console.error('[YOUTUBE-SYNC] Failed syncing with backend:', err);
+          }
         } else {
           setProgress(50);
           await SyncService.queueResourceUpload(videoPayload);
@@ -263,7 +247,7 @@ export function UploadSection({ user, onUploadComplete }: UploadSectionProps) {
         setYoutubeUrl('');
         setFormData({
           title: '',
-          className: 'S1',
+          className: user.class || 'S1',
           category: 'pastpaper',
           subject: 'Mathematics',
           author: user.fullName || user.username,
