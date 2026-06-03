@@ -49,6 +49,53 @@ import { UserManualView } from './components/UserManualView';
 import { motion, AnimatePresence } from 'motion/react';
 import { SyncService } from './lib/syncService';
 
+// Beautiful high-fidelity, dual-pitch notification chime sound
+const playChimeNotificationSound = () => {
+  try {
+    const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    
+    // First high tone (sweet & clear)
+    const osc1 = audioCtx.createOscillator();
+    const gain1 = audioCtx.createGain();
+    osc1.type = 'sine';
+    osc1.frequency.setValueAtTime(587.33, audioCtx.currentTime); // D5
+    osc1.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.15); // A5
+    
+    gain1.gain.setValueAtTime(0.12, audioCtx.currentTime);
+    gain1.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.35);
+    
+    osc1.connect(gain1);
+    gain1.connect(audioCtx.destination);
+    
+    osc1.start();
+    osc1.stop(audioCtx.currentTime + 0.35);
+
+    // Second complementary note (slightly trailing for harmonic resonance)
+    setTimeout(() => {
+      try {
+        const osc2 = audioCtx.createOscillator();
+        const gain2 = audioCtx.createGain();
+        osc2.type = 'sine';
+        osc2.frequency.setValueAtTime(880, audioCtx.currentTime); // A5
+        osc2.frequency.exponentialRampToValueAtTime(1174.66, audioCtx.currentTime + 0.15); // D6
+        
+        gain2.gain.setValueAtTime(0.10, audioCtx.currentTime);
+        gain2.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.4);
+        
+        osc2.connect(gain2);
+        gain2.connect(audioCtx.destination);
+        
+        osc2.start();
+        osc2.stop(audioCtx.currentTime + 0.4);
+      } catch (innerErr) {
+        console.warn('Second note failed', innerErr);
+      }
+    }, 120);
+  } catch (e) {
+    console.warn('AudioContext not allowed or unsupported by user interaction rules yet.', e);
+  }
+};
+
 export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [resources, setResources] = useState<Resource[]>([]);
@@ -152,6 +199,7 @@ export default function App() {
           const now = Date.now();
           const createdAt = data.createdAt?.toMillis ? data.createdAt.toMillis() : now;
           if (!data.read && (now - createdAt < 10000)) {
+            playChimeNotificationSound();
             setActiveNotification({ id: change.doc.id, ...data } as Notification);
             setTimeout(() => setActiveNotification(null), 5000);
           }

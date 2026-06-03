@@ -25,6 +25,9 @@ enableMultiTabIndexedDbPersistence(db).catch((err) => {
 
 export const storage = getStorage(app);
 export const googleProvider = new GoogleAuthProvider();
+googleProvider.setCustomParameters({
+  prompt: 'select_account'
+});
 
 // Guard against overlapping auth requests which cause "auth/cancelled-popup-request"
 // and "INTERNAL ASSERTION FAILED: Pending promise was never set"

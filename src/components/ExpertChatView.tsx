@@ -45,6 +45,53 @@ interface ExpertChatViewProps {
   user: User;
 }
 
+// Helper synthesizers for message sounds
+const playChatIncomingSound = () => {
+  try {
+    const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(650, audioCtx.currentTime); 
+    osc.frequency.exponentialRampToValueAtTime(950, audioCtx.currentTime + 0.08);
+    
+    gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.15);
+    
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.15);
+  } catch (e) {
+    console.warn('AudioContext blocked', e);
+  }
+};
+
+const playChatOutgoingSound = () => {
+  try {
+    const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(450, audioCtx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(250, audioCtx.currentTime + 0.05);
+    
+    gain.gain.setValueAtTime(0.04, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.05);
+    
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.05);
+  } catch (e) {
+    console.warn('AudioContext blocked', e);
+  }
+};
+
 export function ExpertChatView({ user }: ExpertChatViewProps) {
   const [conversations, setConversations] = useState<(Conversation & { otherUser?: User })[]>([]);
   const [activeConvId, setActiveConvId] = useState<string | null>(null);
@@ -300,6 +347,20 @@ export function ExpertChatView({ user }: ExpertChatViewProps) {
         return timeA - timeB;
       });
 
+      // Play soft chime if a new incoming message is added in real-time
+      snapshot.docChanges().forEach((change) => {
+        if (change.type === 'added') {
+          const data = change.doc.data();
+          if (data && data.senderId !== user.uid) {
+            const now = Date.now();
+            const msgTime = data.timestamp?.toMillis ? data.timestamp.toMillis() : (data.timestamp?.seconds ? data.timestamp.seconds * 1000 : now);
+            if (now - msgTime < 8000) {
+              playChatIncomingSound();
+            }
+          }
+        }
+      });
+
       setMessages(merged);
     });
 
@@ -319,6 +380,7 @@ export function ExpertChatView({ user }: ExpertChatViewProps) {
     setInputText('');
 
     try {
+      playChatOutgoingSound();
       // Utilize local-first messaging synchronizer pipeline!
       await SyncService.sendTextMessage(activeConvId, user.uid, user.fullName, text);
     } catch (error) {
@@ -435,9 +497,10 @@ export function ExpertChatView({ user }: ExpertChatViewProps) {
                   <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br from-primary/20 to-accent/20 p-0.5 group-hover:rotate-3 transition-transform`}>
                     <div className="w-full h-full rounded-[14px] bg-white flex items-center justify-center overflow-hidden">
                       <img 
-                        src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${conv.otherUser?.username || 'user'}`} 
+                        src={conv.otherUser?.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${conv.otherUser?.username || 'user'}`} 
                         alt="Avatar" 
                         className="w-full h-full object-cover"
+                        referrerPolicy="no-referrer"
                       />
                     </div>
                   </div>
@@ -486,7 +549,7 @@ export function ExpertChatView({ user }: ExpertChatViewProps) {
                   <ChevronLeft className="w-6 h-6" />
                 </button>
                 <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center overflow-hidden">
-                  <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${activeConversation?.otherUser?.username || 'user'}`} alt="" />
+                  <img src={activeConversation?.otherUser?.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${activeConversation?.otherUser?.username || 'user'}`} alt="" referrerPolicy="no-referrer" />
                 </div>
                 <div>
                   <h3 className="font-bold text-text-main text-sm">{activeConversation?.otherUser?.fullName}</h3>
