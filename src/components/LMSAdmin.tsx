@@ -229,9 +229,20 @@ export function LMSAdmin({ user: currentUser, onAddClick, resources, onDeleteRes
       case 'teachers':
         return teachers.filter(t => t.fullName?.toLowerCase().includes(query) || t.username?.toLowerCase().includes(query));
       case 'students':
-        return students.filter(s => s.fullName?.toLowerCase().includes(query) || s.class?.toLowerCase().includes(query));
+        return students.filter(s => 
+          s.fullName?.toLowerCase().includes(query) || 
+          s.class?.toLowerCase().includes(query) ||
+          s.contactCode?.toLowerCase().includes(query) ||
+          `stu-${s.contactCode}`.toLowerCase().includes(query)
+        );
       case 'users':
-        return users.filter(u => u.fullName?.toLowerCase().includes(query) || u.username?.toLowerCase().includes(query) || u.role?.toLowerCase().includes(query));
+        return users.filter(u => 
+          u.fullName?.toLowerCase().includes(query) || 
+          u.username?.toLowerCase().includes(query) || 
+          u.role?.toLowerCase().includes(query) ||
+          u.contactCode?.toLowerCase().includes(query) ||
+          `stu-${u.contactCode}`.toLowerCase().includes(query)
+        );
       case 'library':
         return resources.filter(r => r.title?.toLowerCase().includes(query) || r.author?.toLowerCase().includes(query));
       case 'usage':
@@ -678,7 +689,7 @@ export function LMSAdmin({ user: currentUser, onAddClick, resources, onDeleteRes
                 {activeSubTab === 'courses' || activeSubTab === 'quizzes' || activeSubTab === 'library' ? item.title : item.fullName}
               </h3>
               
-              <p className="text-sm text-slate-400 mb-4">
+              <p className="text-sm text-slate-400 mb-2">
                 {activeSubTab === 'courses' && `Subject: ${item.subject}`}
                 {activeSubTab === 'quizzes' && `Course ID: ${item.courseId}`}
                 {activeSubTab === 'library' && `Author: ${item.author} | Type: ${item.type}`}
@@ -686,6 +697,14 @@ export function LMSAdmin({ user: currentUser, onAddClick, resources, onDeleteRes
                 {activeSubTab === 'students' && `Class: ${item.class || 'N/A'}`}
                 {activeSubTab === 'users' && `Role: ${item.role} | @${item.username}`}
               </p>
+
+              {['students', 'users', 'teachers'].includes(activeSubTab) && (
+                <div className="mb-4">
+                  <span className="text-[10px] font-bold text-amber-500 bg-amber-500/10 border border-amber-500/20 px-2 py-1 rounded-md font-mono inline-block">
+                    🔒 LIFETIME ID: STU-{item.contactCode || '10001'}
+                  </span>
+                </div>
+              )}
 
               <div className="pt-4 border-t border-white/5 flex items-center justify-between">
                 <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">

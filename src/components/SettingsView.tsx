@@ -180,6 +180,28 @@ export function SettingsView({ user, theme, onThemeChange, onUserUpdate }: Setti
               </div>
               
               <div className="grid md:grid-cols-2 gap-6">
+                <div className="md:col-span-2 p-5 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[9px] bg-amber-600 text-white font-black uppercase tracking-widest px-2 py-0.5 rounded-md font-sans">
+                        🔒 LIFETIME STUDENT ID
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-amber-800/80 font-medium max-w-md">
+                      Your permanent, verified academic credential. This lifetime identifier remains constant and can never be replaced or altered.
+                    </p>
+                  </div>
+                  <div className="bg-white px-5 py-3 rounded-xl border border-amber-200/60 shadow-sm flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-amber-600/10 flex items-center justify-center text-amber-700">
+                      <Shield className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <span className="text-[9px] font-bold text-amber-500 uppercase tracking-widest block leading-none">VERIFIED SERIAL</span>
+                      <span className="text-lg font-mono font-black text-amber-950">STU-{editedUser.contactCode || '10001'}</span>
+                    </div>
+                  </div>
+                </div>
+
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Full Name</label>
                   <input 

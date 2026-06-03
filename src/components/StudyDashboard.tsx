@@ -16,6 +16,7 @@ import {
   Layers,
   Search,
   GraduationCap,
+  Shield,
   X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -175,15 +176,17 @@ export function StudyDashboard({ user, onOpenResource, resources, courses = [], 
               Your academic progress is looking great! You've covered 3 new topics this week.
             </p>
           </div>
-          <div className="flex items-center gap-4 bg-white/20 backdrop-blur-md p-6 rounded-[2.5rem] border border-white/20">
-            <div className="w-16 h-16 rounded-3xl bg-white flex items-center justify-center text-primary shadow-lg">
-               <Trophy className="w-8 h-8" />
-            </div>
-            <div>
-               <p className="text-xs font-black text-white/70 uppercase tracking-widest mb-1">Scholar ID</p>
-               <p className="text-2xl font-black text-white">#{user.contactCode || '00001'}</p>
-            </div>
-          </div>
+           <div className="flex items-center gap-4 bg-white/20 backdrop-blur-md p-6 rounded-[2.5rem] border border-white/20">
+             <div className="w-16 h-16 rounded-3xl bg-white flex items-center justify-center text-primary shadow-lg">
+                <Shield className="w-8 h-8 text-amber-500 animate-pulse" />
+             </div>
+             <div>
+                <p className="text-xs font-black text-white/70 uppercase tracking-widest mb-1 flex items-center gap-1">
+                  <span>🔒 LIFETIME ID</span>
+                </p>
+                <p className="text-2xl font-mono font-black text-white">STU-{user.contactCode || '10001'}</p>
+             </div>
+           </div>
         </div>
       </div>
 

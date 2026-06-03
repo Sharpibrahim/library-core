@@ -250,9 +250,15 @@ export function Sidebar({ activeTab, setActiveTab, onLogout, isOpen, setIsOpen, 
                 
                 <div className="flex-grow min-w-0">
                   <p className="font-bold text-sm text-text-main truncate">{user.fullName}</p>
-                  <div className="flex items-center gap-2">
-                    <p className="text-[10px] font-bold text-text-secondary uppercase tracking-widest truncate">{user.role}</p>
-                    <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-md font-mono font-black">{user.contactCode}</span>
+                  <div className="flex flex-col gap-0.5">
+                    <p className="text-[9px] font-bold text-text-secondary uppercase tracking-widest truncate">{user.role}</p>
+                    <div 
+                      className="inline-flex items-center gap-1 text-[9px] bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded-md font-mono font-black w-max shadow-sm cursor-help"
+                      title="Your permanent Lifetime Academic Code is verified and secure."
+                    >
+                      <span className="w-1 h-1 rounded-full bg-amber-500 animate-pulse" />
+                      STU-{user.contactCode || '10001'}
+                    </div>
                   </div>
                 </div>
                 
