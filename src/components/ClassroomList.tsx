@@ -17,6 +17,8 @@ export function ClassroomList({ user }: ClassroomListProps) {
   const [isJoinModalOpen, setIsJoinModalOpen] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [joinCode, setJoinCode] = useState('');
+  const [joinError, setJoinError] = useState<string | null>(null);
+  const [createError, setCreateError] = useState<string | null>(null);
   
   const [newClassName, setNewClassName] = useState('');
   const [newClassSubject, setNewClassSubject] = useState('');
@@ -42,7 +44,10 @@ export function ClassroomList({ user }: ClassroomListProps) {
     fetchClasses();
 
     const handleToggleCreate = (e: any) => {
-       if (e.detail && (user.role === 'teacher' || user.role === 'admin')) setIsCreateModalOpen(true);
+       if (e.detail && (user.role === 'teacher' || user.role === 'admin')) {
+         setCreateError(null);
+         setIsCreateModalOpen(true);
+       }
     };
     window.addEventListener('toggleCreateClass', handleToggleCreate);
     return () => {
@@ -52,6 +57,7 @@ export function ClassroomList({ user }: ClassroomListProps) {
 
   const handleJoinClass = async () => {
     if (!joinCode) return;
+    setJoinError(null);
     try {
       const res = await fetch('/api/classes/join', {
         method: 'POST',
@@ -68,16 +74,18 @@ export function ClassroomList({ user }: ClassroomListProps) {
         fetchClasses();
       } else {
         const err = await res.json();
-        alert(err.error || 'Failed to join class');
+        setJoinError(err.error || 'Failed to join class. Please verify the class code.');
       }
     } catch (e) {
        console.error(e);
+       setJoinError('Network error. Please try again.');
     }
   };
 
   const handleCreateClass = async () => {
+    setCreateError(null);
     if (!isTeacher) {
-      alert("Only teachers and administrators are allowed to create classes.");
+      setCreateError("Only teachers and administrators are allowed to create classes.");
       return;
     }
     if (!newClassName || !newClassSubject) return;
@@ -99,12 +107,12 @@ export function ClassroomList({ user }: ClassroomListProps) {
         fetchClasses();
       } else {
         const errorData = await res.json();
-        alert(`Failed to create class: ${errorData.details || errorData.error}`);
+        setCreateError(errorData.details || errorData.error || 'Failed to create class');
         console.error("Create class error response:", errorData);
       }
     } catch (e) {
       console.error(e);
-      alert("Network error: " + String(e));
+      setCreateError("Network error: " + String(e));
     }
   };
 
@@ -197,6 +205,13 @@ export function ClassroomList({ user }: ClassroomListProps) {
              <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl">
                 <h3 className="text-2xl font-bold text-gray-900 mb-2">Join Class</h3>
                 <p className="text-gray-500 mb-6 font-medium">Ask your teacher for the class code, then enter it here.</p>
+                
+                {joinError && (
+                   <div className="mb-4 p-3 bg-red-50 text-red-600 rounded-xl text-xs font-bold border border-red-100">
+                      {joinError}
+                   </div>
+                )}
+
                 <input 
                   type="text" 
                   placeholder="Class code" 
@@ -205,7 +220,7 @@ export function ClassroomList({ user }: ClassroomListProps) {
                   onChange={e => setJoinCode(e.target.value.toUpperCase())}
                 />
                 <div className="flex justify-end gap-3">
-                   <button onClick={() => setIsJoinModalOpen(false)} className="px-5 py-2.5 text-gray-500 font-bold hover:bg-gray-50 rounded-xl transition-colors">Cancel</button>
+                   <button onClick={() => { setIsJoinModalOpen(false); setJoinError(null); }} className="px-5 py-2.5 text-gray-500 font-bold hover:bg-gray-50 rounded-xl transition-colors">Cancel</button>
                    <button onClick={handleJoinClass} disabled={!joinCode} className="px-5 py-2.5 bg-purple-600 text-white font-bold rounded-xl hover:bg-purple-700 disabled:opacity-50 transition-colors">Join</button>
                 </div>
              </div>
@@ -216,6 +231,13 @@ export function ClassroomList({ user }: ClassroomListProps) {
           <div className="fixed inset-0 bg-gray-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
              <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl">
                 <h3 className="text-2xl font-bold text-gray-900 mb-6">Create Class</h3>
+                
+                {createError && (
+                   <div className="mb-4 p-3 bg-red-50 text-red-600 rounded-xl text-xs font-bold border border-red-100">
+                      {createError}
+                   </div>
+                )}
+
                 <div className="space-y-4 mb-8">
                    <div>
                       <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Class Name (required)</label>
@@ -239,7 +261,7 @@ export function ClassroomList({ user }: ClassroomListProps) {
                    </div>
                 </div>
                 <div className="flex justify-end gap-3">
-                   <button onClick={() => setIsCreateModalOpen(false)} className="px-5 py-2.5 text-gray-500 font-bold hover:bg-gray-50 rounded-xl transition-colors">Cancel</button>
+                   <button onClick={() => { setIsCreateModalOpen(false); setCreateError(null); }} className="px-5 py-2.5 text-gray-500 font-bold hover:bg-gray-50 rounded-xl transition-colors">Cancel</button>
                    <button onClick={handleCreateClass} disabled={!newClassName} className="px-5 py-2.5 bg-purple-600 text-white font-bold rounded-xl hover:bg-purple-700 disabled:opacity-50 transition-colors">Create</button>
                 </div>
              </div>

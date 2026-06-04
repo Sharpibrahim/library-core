@@ -419,6 +419,68 @@ async function deleteFromStorage(filename: string) {
   }
 }
 
+async function ensureLocalFile(fileUrl: string): Promise<string | null> {
+  if (!fileUrl) return null;
+  
+  // If it's a relative path starting with / or directly referencing standard naming like /uploads or uploads
+  if (!fileUrl.startsWith('http://') && !fileUrl.startsWith('https://')) {
+    const relativePath = fileUrl.startsWith('/') ? fileUrl.substring(1) : fileUrl;
+    const localPath = path.join(process.cwd(), relativePath);
+    if (fs.existsSync(localPath)) {
+      return localPath;
+    }
+
+    // Since it's not found locally, if we have a gcsBucket, attempt to fetch it and cache it locally!
+    const filename = path.basename(relativePath);
+    if (gcsBucket) {
+      try {
+        const file = gcsBucket.file(filename);
+        const [exists] = await file.exists();
+        if (exists) {
+          console.log(`[STORAGE] Caching ${filename} from GCS to local directory: ${localPath}`);
+          const dir = path.dirname(localPath);
+          if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+          }
+          await file.download({ destination: localPath });
+          console.log(`[STORAGE] Caching ${filename} from GCS complete.`);
+          return localPath;
+        }
+      } catch (err) {
+        console.error(`[STORAGE] Failed caching ${filename} from GCS:`, err);
+      }
+    }
+    return null;
+  }
+
+  // It's a remote URL, like https://firebasestorage.googleapis.com/...
+  // Let's cache it locally under uploadsDir/cached_<filename> so we don't download it repeatedly!
+  const cleanedFilename = path.basename(fileUrl.split('?')[0]);
+  const cachedFilename = `cached_${cleanedFilename}`;
+  const localCachePath = path.join(uploadsDir, cachedFilename);
+
+  if (fs.existsSync(localCachePath)) {
+    return localCachePath;
+  }
+
+  try {
+    console.log(`[HTTP CACHE] Downloading remote file: ${fileUrl} to local space: ${localCachePath}`);
+    if (!fs.existsSync(uploadsDir)) {
+      fs.mkdirSync(uploadsDir, { recursive: true });
+    }
+    const response = await fetch(fileUrl);
+    if (!response.ok) throw new Error(`Failed to fetch remote file: ${response.statusText}`);
+    
+    const buffer = await response.arrayBuffer();
+    fs.writeFileSync(localCachePath, Buffer.from(buffer));
+    console.log(`[HTTP CACHE] Download complete: ${localCachePath}`);
+    return localCachePath;
+  } catch (err) {
+    console.error(`[HTTP CACHE] Failed to download remote file ${fileUrl}:`, err);
+    return null;
+  }
+}
+
 // Setup Multer for file uploads
 let uploadsDir = path.join(process.cwd(), 'uploads');
 
@@ -1439,8 +1501,8 @@ app.post('/api/ai/chat', async (req, res) => {
       }
 
       if (resource && resource.file_url) {
-        const filePath = path.join(process.cwd(), resource.file_url.startsWith('/') ? resource.file_url.substring(1) : resource.file_url);
-        if (fs.existsSync(filePath)) {
+        const filePath = await ensureLocalFile(resource.file_url);
+        if (filePath) {
           console.log(`Performing local offline QA for specific document: ${resource.title}`);
           const { getLocalAnswer } = await import("./localAi.ts");
           const result = await getLocalAnswer(message, filePath);
@@ -1458,10 +1520,15 @@ app.post('/api/ai/chat', async (req, res) => {
 
       const { searchLibrary } = await import("./localAi.ts");
       const resources = db.prepare('SELECT title, file_url FROM resources WHERE file_url IS NOT NULL').all() as any[];
-      const docsToSearch = resources.map(r => ({
-        title: r.title,
-        filePath: path.join(process.cwd(), r.file_url.startsWith('/') ? r.file_url.substring(1) : r.file_url)
-      })).filter(doc => fs.existsSync(doc.filePath));
+      const docsToSearchWithPaths = await Promise.all(resources.map(async (r) => {
+        try {
+          const filePath = await ensureLocalFile(r.file_url);
+          return filePath ? { title: r.title, filePath } : null;
+        } catch (e) {
+          return null;
+        }
+      }));
+      const docsToSearch = docsToSearchWithPaths.filter((d): d is { title: string; filePath: string } => d !== null);
 
       console.log(`Performing library-wide offline search (Fallback: ${isKeyMissing}) for: ${message}`);
       const result = await searchLibrary(message, docsToSearch);
@@ -1489,8 +1556,8 @@ app.post('/api/ai/chat', async (req, res) => {
 
     let documentContentText = "";
     if (resource && resource.file_url) {
-      const filePath = path.join(process.cwd(), resource.file_url.startsWith('/') ? resource.file_url.substring(1) : resource.file_url);
-      if (fs.existsSync(filePath)) {
+      const filePath = await ensureLocalFile(resource.file_url);
+      if (filePath) {
         try {
           const { extractText } = await import("./localAi.ts");
           const text = await extractText(filePath);
@@ -1630,9 +1697,9 @@ app.post('/api/ai/document-chat', async (req, res) => {
       return res.status(400).json({ reply: "This resource does not have an associated file for analysis." });
     }
 
-    const filePath = path.join(process.cwd(), resource.file_url.startsWith('/') ? resource.file_url.substring(1) : resource.file_url);
-    if (!fs.existsSync(filePath)) {
-      return res.status(404).json({ reply: "The resource file could not be found on the server." });
+    const filePath = await ensureLocalFile(resource.file_url);
+    if (!filePath) {
+      return res.status(404).json({ reply: "The resource file could not be found or downloaded on the server." });
     }
 
     const apiKey = process.env.GEMINI_API_KEY;
@@ -1906,7 +1973,7 @@ app.get('/api/assignments/:id', (req, res) => {
     assignment.submissions = db.prepare(`
       SELECT s.*, u.full_name as student_name 
       FROM class_submissions s 
-      LEFT JOIN users u ON s.student_id = u.id 
+      LEFT JOIN users u ON s.student_id = u.id OR s.student_id = u.uid
       WHERE s.assignment_id = ?
     `).all(id);
 
@@ -1961,7 +2028,7 @@ app.get('/api/classes/:id/announcements', (req, res) => {
     const posts = db.prepare(`
       SELECT a.*, u.full_name as teacher_name 
       FROM class_announcements a 
-      LEFT JOIN users u ON a.teacher_id = u.id 
+      LEFT JOIN users u ON a.teacher_id = u.id OR a.teacher_id = u.uid
       WHERE a.class_id = ? 
       ORDER BY a.created_at DESC
     `).all(id);
@@ -1981,34 +2048,13 @@ app.post('/api/quizzes/generate', async (req, res) => {
       return res.status(404).json({ error: "Resource file not found." });
     }
 
-    let filePath = '';
-    let isTempFile = false;
-
-    if (resource.file_url.startsWith('http')) {
-      // Download remote file to temp location for processing
-      const response = await fetch(resource.file_url);
-      if (!response.ok) throw new Error(`Failed to fetch remote file: ${response.statusText}`);
-      
-      const buffer = await response.arrayBuffer();
-      const tempFilename = `temp_${Date.now()}_${path.basename(resource.file_url.split('?')[0])}`;
-      filePath = path.join(uploadsDir, tempFilename);
-      fs.writeFileSync(filePath, Buffer.from(buffer));
-      isTempFile = true;
-    } else {
-      filePath = path.join(process.cwd(), resource.file_url);
-    }
-
-    if (!fs.existsSync(filePath)) {
-      return res.status(404).json({ error: "File not found." });
+    const filePath = await ensureLocalFile(resource.file_url);
+    if (!filePath) {
+      return res.status(404).json({ error: "File not found or could not be downloaded." });
     }
 
     const { extractText } = await import("./localAi.ts");
     const text = await extractText(filePath);
-    
-    // Clean up temp file if needed
-    if (isTempFile && fs.existsSync(filePath)) {
-      try { fs.unlinkSync(filePath); } catch (e) {}
-    }
     const context = text.substring(0, 15000); // Limit context for token efficiency
 
     const ai = getGenAI();
@@ -2165,8 +2211,8 @@ async function startServer() {
         FROM class_submissions s
         JOIN class_assignments a ON s.assignment_id = a.id
         JOIN classes c ON a.class_id = c.id
-        WHERE s.student_id = ? OR s.student_id IN (SELECT id FROM users WHERE uid = ?)
-      `).all(userId, userId);
+        WHERE s.student_id = ? OR s.student_id IN (SELECT id FROM users WHERE uid = ?) OR s.student_id = ?
+      `).all(userId, userId, userId);
       
       res.json(submissions);
     } catch (error: any) {
@@ -2294,7 +2340,13 @@ async function startServer() {
     if (fs.existsSync(distPath)) {
       app.use(express.static(distPath));
       app.get('*', (req, res) => {
-        res.sendFile(path.join(distPath, 'index.html'));
+        const indexPath = path.join(distPath, 'index.html');
+        res.sendFile(indexPath, (err) => {
+          if (err) {
+            console.error('[PROD] Failed to serve index.html:', err);
+            res.status(500).send('<h1>Server Error</h1><p>Production index.html is missing. Please wait for the application to compile and refresh.</p>');
+          }
+        });
       });
     } else {
       console.error('[PROD] ❌ CRITICAL: dist folder missing!');

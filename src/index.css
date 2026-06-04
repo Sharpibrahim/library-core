@@ -170,3 +170,21 @@ select, option {
   background-color: #ffffff !important;
   color: #1e293b !important;
 }
+
+@keyframes scanline {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100%); }
+}
+
+@keyframes audio-pulse {
+  0%, 100% { transform: scaleY(0.4); }
+  50% { transform: scaleY(1.8); }
+}
+
+.animate-scanline {
+  animation: scanline 4s linear infinite;
+}
+
+.animate-audio-pulse {
+  animation: audio-pulse 1.2s ease-in-out infinite;
+}

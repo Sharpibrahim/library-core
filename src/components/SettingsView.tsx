@@ -237,7 +237,16 @@ export function SettingsView({ user, theme, onThemeChange, onUserUpdate }: Setti
                     </div>
                     <div>
                       <span className="text-[9px] font-bold text-amber-500 uppercase tracking-widest block leading-none">VERIFIED SERIAL</span>
-                      <span className="text-lg font-mono font-black text-amber-950">STU-{editedUser.contactCode || '10001'}</span>
+                      <span className="text-lg font-mono font-black text-amber-950">{(() => {
+                        const code = editedUser.contactCode || '10001';
+                        const upper = code.toUpperCase();
+                        if (upper.includes('ADMIN') || upper.includes('STUDENT') || upper.includes('TR') || upper.includes('TEACHER')) {
+                          return code;
+                        }
+                        if (editedUser.role === 'admin') return `ADMIN-${code}`;
+                        if (editedUser.role === 'teacher') return `TR-${code}`;
+                        return `STUDENT-${code}`;
+                      })()}</span>
                     </div>
                   </div>
                 </div>

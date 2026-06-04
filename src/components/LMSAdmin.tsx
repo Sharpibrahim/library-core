@@ -72,6 +72,17 @@ export function LMSAdmin({ user: currentUser, onAddClick, resources, onDeleteRes
   const [isEditingCourse, setIsEditingCourse] = useState(false);
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
 
+  const [passwordPromptUser, setPasswordPromptUser] = useState<User | null>(null);
+  const [selectedUserForDetails, setSelectedUserForDetails] = useState<User | null>(null);
+  const [enteredPassword, setEnteredPassword] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+
+  useEffect(() => {
+    if (currentUser.role !== 'admin' && ['teachers', 'students', 'users', 'usage'].includes(activeSubTab)) {
+      setActiveSubTab('courses');
+    }
+  }, [activeSubTab, currentUser.role]);
+
   useEffect(() => {
     setIsLoading(true);
     
@@ -233,6 +244,7 @@ export function LMSAdmin({ user: currentUser, onAddClick, resources, onDeleteRes
           s.fullName?.toLowerCase().includes(query) || 
           s.class?.toLowerCase().includes(query) ||
           s.contactCode?.toLowerCase().includes(query) ||
+          `student-${s.contactCode}`.toLowerCase().includes(query) ||
           `stu-${s.contactCode}`.toLowerCase().includes(query)
         );
       case 'users':
@@ -241,6 +253,9 @@ export function LMSAdmin({ user: currentUser, onAddClick, resources, onDeleteRes
           u.username?.toLowerCase().includes(query) || 
           u.role?.toLowerCase().includes(query) ||
           u.contactCode?.toLowerCase().includes(query) ||
+          `admin-${u.contactCode}`.toLowerCase().includes(query) ||
+          `tr-${u.contactCode}`.toLowerCase().includes(query) ||
+          `student-${u.contactCode}`.toLowerCase().includes(query) ||
           `stu-${u.contactCode}`.toLowerCase().includes(query)
         );
       case 'library':
@@ -277,14 +292,14 @@ export function LMSAdmin({ user: currentUser, onAddClick, resources, onDeleteRes
       {/* Sub-navigation */}
       <div className="flex flex-wrap gap-4 mb-8">
         {[
-          { id: 'courses', label: 'Courses', icon: GraduationCap },
-          { id: 'quizzes', label: 'Quizzes', icon: ClipboardList },
-          { id: 'teachers', label: 'Teachers', icon: Users },
-          { id: 'students', label: 'Students', icon: BookOpen },
-          { id: 'users', label: 'All Users', icon: ShieldCheck },
-          { id: 'library', label: 'Library', icon: Archive },
-          { id: 'usage', label: 'Usage Monitor', icon: Activity },
-        ].map((tab) => {
+          { id: 'courses', label: 'Courses', icon: GraduationCap, adminOnly: false },
+          { id: 'quizzes', label: 'Quizzes', icon: ClipboardList, adminOnly: false },
+          { id: 'teachers', label: 'Teachers', icon: Users, adminOnly: true },
+          { id: 'students', label: 'Students', icon: BookOpen, adminOnly: true },
+          { id: 'users', label: 'All Users', icon: ShieldCheck, adminOnly: true },
+          { id: 'library', label: 'Library', icon: Archive, adminOnly: false },
+          { id: 'usage', label: 'Usage Monitor', icon: Activity, adminOnly: true },
+        ].filter(tab => !tab.adminOnly || currentUser.role === 'admin').map((tab) => {
           const Icon = tab.icon;
           const isActive = activeSubTab === tab.id;
           return (
@@ -701,7 +716,17 @@ export function LMSAdmin({ user: currentUser, onAddClick, resources, onDeleteRes
               {['students', 'users', 'teachers'].includes(activeSubTab) && (
                 <div className="mb-4">
                   <span className="text-[10px] font-bold text-amber-500 bg-amber-500/10 border border-amber-500/20 px-2 py-1 rounded-md font-mono inline-block">
-                    🔒 LIFETIME ID: STU-{item.contactCode || '10001'}
+                    🔒 LIFETIME ID: {(() => {
+                      const code = item.contactCode || '10001';
+                      const upper = code.toUpperCase();
+                      if (upper.includes('ADMIN') || upper.includes('STUDENT') || upper.includes('TR') || upper.includes('TEACHER')) {
+                        return code;
+                      }
+                      const inferredRole = item.role || (activeSubTab === 'teachers' ? 'teacher' : activeSubTab === 'students' ? 'student' : 'student');
+                      if (inferredRole === 'admin') return `ADMIN-${code}`;
+                      if (inferredRole === 'teacher') return `TR-${code}`;
+                      return `STUDENT-${code}`;
+                    })()}
                   </span>
                 </div>
               )}
@@ -710,7 +735,21 @@ export function LMSAdmin({ user: currentUser, onAddClick, resources, onDeleteRes
                 <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
                   {activeSubTab === 'courses' ? `By ${item.teacherName || 'Unknown'}` : activeSubTab === 'library' ? `Uploaded: ${new Date(item.createdAt).toLocaleDateString()}` : `ID: #${item.id}`}
                 </span>
-                <button className="text-accent font-bold text-xs hover:underline">
+                <button 
+                  onClick={() => {
+                    if (['teachers', 'students', 'users'].includes(activeSubTab)) {
+                      setPasswordPromptUser(item);
+                      setEnteredPassword('');
+                      setPasswordError('');
+                    } else if (activeSubTab === 'courses') {
+                      setSelectedCourse(item);
+                      setIsEditingCourse(true);
+                    } else if (activeSubTab === 'library') {
+                      alert(`Details for resource "${item.title}":\nAuthor: ${item.author}\nType: ${item.type}\nGenre: ${item.genre || 'N/A'}\nDescription: ${item.description || 'No description provided'}`);
+                    }
+                  }}
+                  className="text-accent font-bold text-xs hover:underline"
+                >
                   View Details
                 </button>
               </div>

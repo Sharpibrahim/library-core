@@ -34,10 +34,16 @@ interface StudyDashboardProps {
 }
 
 export function StudyDashboard({ user, onOpenResource, resources, courses = [], onOpenCourse }: StudyDashboardProps) {
+  const isAdmin = user.role === 'admin' || user.email === 'sharpibrah@gmail.com';
   const [readingHistory, setReadingHistory] = useState<ReadingProgress[]>([]);
   const [studySets, setStudySets] = useState<StudySet[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [enrolledCourses, setEnrolledCourses] = useState<any[]>([]);
+  const [totalMembers, setTotalMembers] = useState(0);
+  const [totalStudents, setTotalStudents] = useState(0);
+  const [totalTeachers, setTotalTeachers] = useState(0);
+  const [downloadCount, setDownloadCount] = useState(0);
+  const [classroomsCount, setClassroomsCount] = useState(0);
 
   useEffect(() => {
     // Load local history initially for instant render
@@ -96,6 +102,23 @@ export function StudyDashboard({ user, onOpenResource, resources, courses = [], 
       }
     }
 
+    // Real-time synchronization of users for admin stats
+    let unsubscribeUsers = () => {};
+    if (isAdmin) {
+      try {
+        unsubscribeUsers = onSnapshot(collection(db, 'users'), (snapshot) => {
+          const allUsers = snapshot.docs.map(doc => doc.data());
+          setTotalMembers(allUsers.length || 0);
+          setTotalStudents(allUsers.filter(u => u.role === 'student').length || 0);
+          setTotalTeachers(allUsers.filter(u => u.role === 'teacher').length || 0);
+        }, (error) => {
+          console.warn('Syncing users in StudyDashboard failed:', error);
+        });
+      } catch (e) {
+        console.warn('Failed to listen to users collection:', e);
+      }
+    }
+
     // Real-time Study Sets
     const qSets = query(collection(db, 'study_sets'), orderBy('createdAt', 'desc'));
     const unsubscribeSets = onSnapshot(qSets, (snapshot) => {
@@ -134,18 +157,161 @@ export function StudyDashboard({ user, onOpenResource, resources, courses = [], 
     };
     fetchEnrolled();
 
+    const fetchClassrooms = async () => {
+      try {
+        const res = await fetch(`/api/users/${user.uid}/classes?role=${user.role}`);
+        if (res.ok) {
+          const data = await res.json();
+          setClassroomsCount(Array.isArray(data) ? data.length : 0);
+        }
+      } catch (err) {
+        console.warn('Failed to fetch classes count:', err);
+      }
+    };
+    fetchClassrooms();
+
+    const checkOfflineDownloads = async () => {
+      if ('caches' in window) {
+        try {
+          const cache = await caches.open('library-files-cache');
+          let count = 0;
+          for (const res of resources) {
+            if (res.fileUrl) {
+              const matched = await cache.match(res.fileUrl);
+              if (matched) count++;
+            }
+          }
+          setDownloadCount(count);
+        } catch (e) {
+          setDownloadCount(0);
+        }
+      }
+    };
+    checkOfflineDownloads();
+
     return () => {
       unsubscribeSets();
       unsubscribeProgress();
+      unsubscribeUsers();
     };
-  }, [user.uid, resources.length]);
+  }, [user.uid, resources.length, user.role]);
 
-  const stats = [
-    { label: 'Books Read', value: readingHistory.length, icon: BookOpen, color: 'text-primary', bg: 'bg-primary/10', onClick: () => window.dispatchEvent(new CustomEvent('changeTab', { detail: 'library' })) },
-    { label: 'Study Streak', value: '12 Days', icon: Flame, color: 'text-orange-500', bg: 'bg-orange-500/10' },
-    { label: 'Total Files', value: resources.length, icon: Library, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
-    { label: 'Quiz Master', value: 'Test Me', icon: Trophy, color: 'text-warning', bg: 'bg-warning/10', onClick: () => window.dispatchEvent(new CustomEvent('changeTab', { detail: 'quizzes' })) },
-  ];
+  // Derived metrics & stats setup
+  const favSubjects = user.favoriteSubjects || [];
+  const favoriteBooksCount = resources.filter(r => r.subject && favSubjects.includes(r.subject)).length;
+  
+  let stats = [];
+  const isTeacher = user.role === 'teacher';
+
+  if (isAdmin) {
+    stats = [
+      { 
+        label: '📚 Total Books', 
+        value: resources.filter(r => r.type === 'book' || r.type === 'pdf' || !r.type).length || resources.length,
+        icon: Library, 
+        color: 'text-primary', 
+        bg: 'bg-primary/10',
+        onClick: () => window.dispatchEvent(new CustomEvent('changeTab', { detail: 'library' }))
+      },
+      { 
+        label: '👥 Total Members', 
+        value: totalMembers || '0', 
+        icon: Trophy, 
+        color: 'text-amber-500', 
+        bg: 'bg-amber-500/10' 
+      },
+      { 
+        label: '🎓 Total Students', 
+        value: totalStudents || '0', 
+        icon: GraduationCap, 
+        color: 'text-emerald-500', 
+        bg: 'bg-emerald-500/10' 
+      },
+      { 
+        label: '👨‍🏫 Total Teachers', 
+        value: totalTeachers || '0', 
+        icon: Layers, 
+        color: 'text-blue-500', 
+        bg: 'bg-blue-500/10' 
+      }
+    ];
+  } else if (isTeacher) {
+    stats = [
+      { 
+        label: '📥 Downloads', 
+        value: downloadCount, 
+        icon: Clock, 
+        color: 'text-emerald-500', 
+        bg: 'bg-emerald-500/10' 
+      },
+      { 
+        label: '⭐ Favorite Books', 
+        value: favoriteBooksCount, 
+        icon: Star, 
+        color: 'text-amber-500', 
+        bg: 'bg-amber-500/10',
+        onClick: () => window.dispatchEvent(new CustomEvent('changeTab', { detail: 'library' }))
+      },
+      { 
+        label: 'Books Read', 
+        value: readingHistory.length, 
+        icon: BookOpen, 
+        color: 'text-primary', 
+        bg: 'bg-primary/10',
+        onClick: () => window.dispatchEvent(new CustomEvent('changeTab', { detail: 'library' }))
+      },
+      { 
+        label: 'Courses Enrolled', 
+        value: enrolledCourses.length, 
+        icon: GraduationCap, 
+        color: 'text-rose-500', 
+        bg: 'bg-rose-500/10',
+        onClick: () => window.dispatchEvent(new CustomEvent('changeTab', { detail: 'courses' }))
+      },
+      { 
+        label: '🏫 Classes', 
+        value: classroomsCount, 
+        icon: Layers, 
+        color: 'text-blue-500', 
+        bg: 'bg-blue-500/10',
+        onClick: () => window.dispatchEvent(new CustomEvent('changeTab', { detail: 'classes' }))
+      }
+    ];
+  } else {
+    stats = [
+      { 
+        label: '📥 Downloads', 
+        value: downloadCount, 
+        icon: Clock, 
+        color: 'text-emerald-500', 
+        bg: 'bg-emerald-500/10' 
+      },
+      { 
+        label: '⭐ Favorite Books', 
+        value: favoriteBooksCount, 
+        icon: Star, 
+        color: 'text-amber-500', 
+        bg: 'bg-amber-500/10',
+        onClick: () => window.dispatchEvent(new CustomEvent('changeTab', { detail: 'library' }))
+      },
+      { 
+        label: 'Books Read', 
+        value: readingHistory.length, 
+        icon: BookOpen, 
+        color: 'text-primary', 
+        bg: 'bg-primary/10',
+        onClick: () => window.dispatchEvent(new CustomEvent('changeTab', { detail: 'library' }))
+      },
+      { 
+        label: 'Courses Enrolled', 
+        value: enrolledCourses.length, 
+        icon: GraduationCap, 
+        color: 'text-rose-500', 
+        bg: 'bg-rose-500/10',
+        onClick: () => window.dispatchEvent(new CustomEvent('changeTab', { detail: 'courses' }))
+      }
+    ];
+  }
 
   const container = {
     hidden: { opacity: 0 },
@@ -184,7 +350,16 @@ export function StudyDashboard({ user, onOpenResource, resources, courses = [], 
                 <p className="text-xs font-black text-white/70 uppercase tracking-widest mb-1 flex items-center gap-1">
                   <span>🔒 LIFETIME ID</span>
                 </p>
-                <p className="text-2xl font-mono font-black text-white">STU-{user.contactCode || '10001'}</p>
+                <p className="text-2xl font-mono font-black text-white">{(() => {
+                     const code = user.contactCode || '10001';
+                     const upper = code.toUpperCase();
+                     if (upper.includes('ADMIN') || upper.includes('STUDENT') || upper.includes('TR') || upper.includes('TEACHER')) {
+                       return code;
+                     }
+                     if (user.role === 'admin') return `ADMIN-${code}`;
+                     if (user.role === 'teacher') return `TR-${code}`;
+                     return `STUDENT-${code}`;
+                   })()}</p>
              </div>
            </div>
         </div>
@@ -252,7 +427,7 @@ export function StudyDashboard({ user, onOpenResource, resources, courses = [], 
         variants={container}
         initial="hidden"
         animate="show"
-        className="grid grid-cols-2 lg:grid-cols-4 gap-6"
+        className={`grid grid-cols-2 ${stats.length === 5 ? 'lg:grid-cols-5' : 'lg:grid-cols-4'} gap-6`}
       >
         {stats.map((stat, i) => (
           <motion.div 

@@ -389,8 +389,9 @@ export function ExpertChatView({ user }: ExpertChatViewProps) {
   };
 
   const findContactByCode = async () => {
-    if (searchCode.length !== 5) {
-      setSearchError('Code must be exactly 5 digits');
+    const cleanCode = searchCode.trim().toUpperCase();
+    if (!cleanCode) {
+      setSearchError('Please enter a contact code');
       return;
     }
 
@@ -398,11 +399,19 @@ export function ExpertChatView({ user }: ExpertChatViewProps) {
     setSearchError('');
 
     try {
-      const q = query(collection(db, 'users'), where('contactCode', '==', searchCode));
+      const codesToTry = [cleanCode];
+      // If user typed exactly 5 digits, expand search to include common prefixes
+      if (/^\d{5}$/.test(cleanCode)) {
+        codesToTry.push(`STUDENT-${cleanCode}`);
+        codesToTry.push(`TR-${cleanCode}`);
+        codesToTry.push(`ADMIN-${cleanCode}`);
+      }
+
+      const q = query(collection(db, 'users'), where('contactCode', 'in', codesToTry));
       const querySnapshot = await getDocs(q);
 
       if (querySnapshot.empty) {
-        setSearchError('No user found with this code.');
+        setSearchError('No user found with this code. Check the prefix (e.g. STUDENT- or TR-).');
       } else {
         const foundUser = querySnapshot.docs[0].data() as User;
         
@@ -853,16 +862,16 @@ export function ExpertChatView({ user }: ExpertChatViewProps) {
                 </div>
 
                 <div className="space-y-4">
-                   <p className="text-sm text-text-secondary font-medium px-2 italic">Enter the unique <span className="text-primary font-bold italic-serif">5-digit code</span> provided by your colleague.</p>
+                   <p className="text-sm text-text-secondary font-medium px-2 italic">Enter the unique <span className="text-primary font-bold italic-serif">academic code</span> (e.g. STUDENT-12345, TR-98765, or the 5 digits).</p>
                    <div className="relative group">
                      <SearchCode className="absolute left-6 top-1/2 -translate-y-1/2 w-6 h-6 text-text-muted group-focus-within:text-primary transition-all" />
                      <input 
                        type="text" 
-                       maxLength={5}
-                       placeholder="00000"
+                       maxLength={20}
+                       placeholder="STUDENT-00000"
                        value={searchCode}
-                       onChange={(e) => setSearchCode(e.target.value.replace(/\D/g, ''))}
-                       className="w-full pl-16 pr-8 py-6 bg-section border-2 border-transparent focus:border-primary focus:bg-white rounded-[2rem] text-3xl font-mono tracking-[0.5em] font-black text-text-main focus:outline-none transition-all placeholder:opacity-20 shadow-inner"
+                       onChange={(e) => setSearchCode(e.target.value.toUpperCase())}
+                       className="w-full pl-16 pr-8 py-6 bg-section border-2 border-transparent focus:border-primary focus:bg-white rounded-[2rem] text-xl font-mono tracking-[0.2em] font-black text-text-main focus:outline-none transition-all placeholder:opacity-25 shadow-inner"
                      />
                    </div>
                    {searchError && (
@@ -875,10 +884,10 @@ export function ExpertChatView({ user }: ExpertChatViewProps) {
 
                 <button 
                   onClick={findContactByCode}
-                  disabled={isSearching || searchCode.length !== 5}
+                  disabled={isSearching || !searchCode.trim()}
                   className={`
                     w-full py-6 rounded-[2rem] font-black text-sm uppercase tracking-widest transition-all flex items-center justify-center gap-3
-                    ${isSearching || searchCode.length !== 5 
+                    ${isSearching || !searchCode.trim() 
                       ? 'bg-section text-text-muted cursor-not-allowed' 
                       : 'bg-primary text-white shadow-2xl shadow-primary/30 hover:scale-[1.02]'}
                   `}

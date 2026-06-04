@@ -350,7 +350,8 @@ export default function App() {
           if (userDoc.exists()) {
             const userData = userDoc.data() as User;
             if (!userData.contactCode) {
-              const contactCode = Math.floor(10000 + Math.random() * 90000).toString();
+              const prefix = userData.role === 'admin' ? 'ADMIN' : userData.role === 'teacher' ? 'TR' : 'STUDENT';
+              const contactCode = `${prefix}-${Math.floor(10000 + Math.random() * 90000).toString()}`;
               await updateDoc(userDocRef, { contactCode });
               // Snapshot will trigger again with updated data
             } else {
@@ -383,17 +384,28 @@ export default function App() {
               }
             }
           } else {
-            // New user from Google
-            const isAdminEmail = firebaseUser.email === 'sharpibrah@gmail.com';
-            const contactCode = Math.floor(10000 + Math.random() * 90000).toString();
+            // Check if user was deleted in real time (we had a valid cache session, but now database document is missing)
+            const existsInStorage = localStorage.getItem('library_core_current_user');
+            if (existsInStorage) {
+              console.log('[REAL-TIME DELETION] Active user document is missing in Firestore. Logging out instantly.');
+              setCurrentUser(null);
+              localStorage.removeItem('library_core_current_user');
+              await signOut(auth);
+              return;
+            }
+
+            // New user from Google or Admin Override
+            const isAdminEmail = firebaseUser.email === 'sharpibrah@gmail.com' || firebaseUser.email === 'sharpwhite@librarycore.com';
+            const rolePrefix = isAdminEmail ? 'ADMIN' : 'STUDENT';
+            const contactCode = isAdminEmail ? 'ADMIN' : `${rolePrefix}-${Math.floor(10000 + Math.random() * 90000).toString()}`;
             const newUser: User = {
               uid: firebaseUser.uid,
-              username: firebaseUser.email?.split('@')[0] || 'user',
-              fullName: firebaseUser.displayName || 'Unnamed Scholar',
-              class: null,
+              username: isAdminEmail ? 'sharpwhite' : (firebaseUser.email?.split('@')[0] || 'user'),
+              fullName: isAdminEmail ? 'Sharp Ibrahim Admin' : (firebaseUser.displayName || 'Unnamed Scholar'),
+              class: isAdminEmail ? 'Administrator' : null,
               role: isAdminEmail ? 'admin' : 'student',
               favoriteSubjects: null,
-              email: firebaseUser.email || null,
+              email: isAdminEmail ? 'sharpibrah@gmail.com' : (firebaseUser.email || null),
               avatarUrl: firebaseUser.photoURL || null,
               contactCode
             };

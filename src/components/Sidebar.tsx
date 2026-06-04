@@ -257,7 +257,16 @@ export function Sidebar({ activeTab, setActiveTab, onLogout, isOpen, setIsOpen, 
                       title="Your permanent Lifetime Academic Code is verified and secure."
                     >
                       <span className="w-1 h-1 rounded-full bg-amber-500 animate-pulse" />
-                      STU-{user.contactCode || '10001'}
+                      {(() => {
+                        const code = user.contactCode || '10001';
+                        const upper = code.toUpperCase();
+                        if (upper.includes('ADMIN') || upper.includes('STUDENT') || upper.includes('TR') || upper.includes('TEACHER')) {
+                          return code;
+                        }
+                        if (user.role === 'admin') return `ADMIN-${code}`;
+                        if (user.role === 'teacher') return `TR-${code}`;
+                        return `STUDENT-${code}`;
+                      })()}
                     </div>
                   </div>
                 </div>

@@ -96,6 +96,7 @@ export function ClassroomConference({ classId, className, user, onLeave }: Class
   // Real presence & simulated peers
   const [realPeers, setRealPeers] = useState<Participant[]>([]);
   const [simulatedPeers, setSimulatedPeers] = useState<Participant[]>([]);
+  const [enableSandboxMockPeers, setEnableSandboxMockPeers] = useState(false);
   const [toasts, setToasts] = useState<ClassroomToast[]>([]);
   
   const [activeSpeaker, setActiveSpeaker] = useState<string | null>(null);
@@ -497,92 +498,93 @@ export function ClassroomConference({ classId, className, user, onLeave }: Class
 
       // 2. Trigger realistic timeline joining events from mock peers to make it look absolutely genuine
       // Simulating teacher and classmates joining right AFTER you, instead of already being static in the call
-      
-      // t = 1.8s: Teacher joins the call
-      setTimeout(() => {
-        const teacher: Participant = {
-          id: 'teacher_host',
-          name: 'Dr. Evelyn Carter',
-          role: 'teacher',
-          avatar: 'https://api.dicebear.com/7.x/initials/svg?seed=Evelyn%20Carter',
-          isMuted: false,
-          isCamOff: false,
-          isSpeaking: true
-        };
-        setSimulatedPeers(prev => [...prev, teacher]);
-        addToast("Dr. Evelyn Carter (Instructor) joined the call.", teacher.avatar);
-        playMeetSound('join');
-      }, 1800);
-
-      // t = 4.2s: Alex Johnson joins
-      setTimeout(() => {
-        const peer1: Participant = {
-          id: 'peer_1',
-          name: 'Alex Johnson',
-          role: 'student',
-          avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Alex',
-          isMuted: true,
-          isCamOff: false,
-          isSpeaking: false
-        };
-        setSimulatedPeers(prev => [...prev, peer1]);
-        addToast("Alex Johnson joined the video lesson.", peer1.avatar);
-        playMeetSound('join');
-      }, 4200);
-
-      // t = 7.5s: Sophia Smith joins
-      setTimeout(() => {
-        const peer2: Participant = {
-          id: 'peer_2',
-          name: 'Sophia Smith',
-          role: 'student',
-          avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Sophia',
-          isMuted: false,
-          isCamOff: true,
-          isSpeaking: false
-        };
-        setSimulatedPeers(prev => [...prev, peer2]);
-        addToast("Sophia Smith (Student) joined the video lesson.", peer2.avatar);
-        playMeetSound('join');
-      }, 7500);
-
-      // t = 13s: Dr. Carter types welcome message
-      setTimeout(() => {
-        setChatMessages(prev => [
-          ...prev, 
-          {
-            sender: "Dr. Evelyn Carter",
-            text: "Welcome back to today's core module lecture, everyone! Today we are discussing offline client database indexing and live synchronization topologies. Feel free to use the React panel up top or drop questions inside the Chat sidebar.",
-            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-          }
-        ]);
-        addToast("Dr. Evelyn Carter commented in the chat.", 'https://api.dicebear.com/7.x/initials/svg?seed=Evelyn%20Carter');
-        playMeetSound('chat');
-      }, 13000);
-
-      // t = 22s: Sophia unmutes and says hello
-      setTimeout(() => {
-        setSimulatedPeers(prev => prev.map(p => p.id === 'peer_2' ? { ...p, isMuted: false, isSpeaking: true } : p));
-        setChatMessages(prev => [
-          ...prev, 
-          {
-            sender: "Sophia Smith",
-            text: "Excited for this chapter! The offline database sync patterns helped me immensely with my homework architecture outline.",
-            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-          }
-        ]);
-        addToast("Sophia Smith unmuted to comment.", 'https://api.dicebear.com/7.x/avataaars/svg?seed=Sophia');
-        playMeetSound('chat');
-      }, 22000);
-
-      // t = 32s: Alex react trigger on screen
-      setTimeout(() => {
-        const randId = Date.now() + Math.random();
-        setEmojiReactions(prev => [...prev, { id: randId, symbol: '💡', left: 45 }]);
+      if (enableSandboxMockPeers) {
+        // t = 1.8s: Teacher joins the call
         setTimeout(() => {
-          setEmojiReactions(prev => prev.filter(e => e.id !== randId));
-        }, 4000);
-      }, 32000);
+          const teacher: Participant = {
+            id: 'teacher_host',
+            name: 'Dr. Evelyn Carter',
+            role: 'teacher',
+            avatar: 'https://api.dicebear.com/7.x/initials/svg?seed=Evelyn%20Carter',
+            isMuted: false,
+            isCamOff: false,
+            isSpeaking: true
+          };
+          setSimulatedPeers(prev => [...prev, teacher]);
+          addToast("Dr. Evelyn Carter (Instructor) joined the call.", teacher.avatar);
+          playMeetSound('join');
+        }, 1800);
+
+        // t = 4.2s: Alex Johnson joins
+        setTimeout(() => {
+          const peer1: Participant = {
+            id: 'peer_1',
+            name: 'Alex Johnson',
+            role: 'student',
+            avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Alex',
+            isMuted: true,
+            isCamOff: false,
+            isSpeaking: false
+          };
+          setSimulatedPeers(prev => [...prev, peer1]);
+          addToast("Alex Johnson joined the video lesson.", peer1.avatar);
+          playMeetSound('join');
+        }, 4200);
+
+        // t = 7.5s: Sophia Smith joins
+        setTimeout(() => {
+          const peer2: Participant = {
+            id: 'peer_2',
+            name: 'Sophia Smith',
+            role: 'student',
+            avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Sophia',
+            isMuted: false,
+            isCamOff: true,
+            isSpeaking: false
+          };
+          setSimulatedPeers(prev => [...prev, peer2]);
+          addToast("Sophia Smith (Student) joined the video lesson.", peer2.avatar);
+          playMeetSound('join');
+        }, 7500);
+
+        // t = 13s: Dr. Carter types welcome message
+        setTimeout(() => {
+          setChatMessages(prev => [
+            ...prev, 
+            {
+              sender: "Dr. Evelyn Carter",
+              text: "Welcome back to today's core module lecture, everyone! Today we are discussing offline client database indexing and live synchronization topologies. Feel free to use the React panel up top or drop questions inside the Chat sidebar.",
+              time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            }
+          ]);
+          addToast("Dr. Evelyn Carter commented in the chat.", 'https://api.dicebear.com/7.x/initials/svg?seed=Evelyn%20Carter');
+          playMeetSound('chat');
+        }, 13000);
+
+        // t = 22s: Sophia unmutes and says hello
+        setTimeout(() => {
+          setSimulatedPeers(prev => prev.map(p => p.id === 'peer_2' ? { ...p, isMuted: false, isSpeaking: true } : p));
+          setChatMessages(prev => [
+            ...prev, 
+            {
+              sender: "Sophia Smith",
+              text: "Excited for this chapter! The offline database sync patterns helped me immensely with my homework architecture outline.",
+              time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            }
+          ]);
+          addToast("Sophia Smith unmuted to comment.", 'https://api.dicebear.com/7.x/avataaars/svg?seed=Sophia');
+          playMeetSound('chat');
+        }, 22050);
+
+        // t = 32s: Alex react trigger on screen
+        setTimeout(() => {
+          const randId = Date.now() + Math.random();
+          setEmojiReactions(prev => [...prev, { id: randId, symbol: '💡', left: 45 }]);
+          setTimeout(() => {
+            setEmojiReactions(prev => prev.filter(e => e.id !== randId));
+          }, 4000);
+        }, 32000);
+      }
 
     } catch (e) {
       console.error('[PRESENCE ERROR] Failed to set up real presence on Firestore: ', e);
@@ -874,8 +876,22 @@ export function ClassroomConference({ classId, className, user, onLeave }: Class
             </div>
           </div>
 
+          {/* Practice Sandbox simulation option */}
+          <div className="bg-slate-900/40 border border-slate-850 p-4 rounded-xl flex items-center justify-between gap-3 text-xs">
+            <div className="flex flex-col">
+              <span className="font-bold text-slate-300">Sandbox Mock Peers</span>
+              <span className="text-[10px] text-slate-500">Simulate mock classmates for offline practice</span>
+            </div>
+            <button 
+              onClick={() => setEnableSandboxMockPeers(prev => !prev)}
+              className={`w-10 h-5 rounded-full p-0.5 flex transition-all duration-300 cursor-pointer ${enableSandboxMockPeers ? 'bg-purple-600 justify-end' : 'bg-slate-700 justify-start'}`}
+            >
+              <div className="w-4 h-4 bg-white rounded-full shadow" />
+            </button>
+          </div>
+
           {/* Join button block with nice status feedback */}
-          <div className="pt-6 border-t border-slate-900 mt-6 md:mt-0">
+          <div className="pt-6 border-t border-slate-905 mt-6 md:mt-0">
             <button
               onClick={handleJoinLesson}
               disabled={isJoining}
@@ -1178,7 +1194,7 @@ export function ClassroomConference({ classId, className, user, onLeave }: Class
           ) : (
             /* EQUAL GRID VIEW MODE (Splits based on total active participants) */
             <div className={`flex-1 p-6 overflow-y-auto grid gap-6 items-stretch min-h-0 bg-slate-950 ${
-              totalClassmates.length === 0 ? 'grid-cols-1' :
+              totalClassmates.length === 0 ? 'grid-cols-1 md:grid-cols-2' :
               totalClassmates.length === 1 ? 'grid-cols-1 md:grid-cols-2' :
               'grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3'
             }`}>
@@ -1237,31 +1253,86 @@ export function ClassroomConference({ classId, className, user, onLeave }: Class
                 )}
               </div>
 
+              {/* Sonar Radar Card when alone */}
+              {totalClassmates.length === 0 && (
+                <div className="relative rounded-3xl bg-slate-900/50 border border-slate-800/80 p-8 flex flex-col items-center justify-center text-center overflow-hidden min-h-[200px] group border-dashed select-none">
+                  {/* Glowing radar pulses */}
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-20">
+                    <span className="absolute w-44 h-44 rounded-full border border-purple-500/40 animate-ping" />
+                    <span className="absolute w-64 h-64 rounded-full border border-purple-500/20 animate-ping [animation-delay:1.5s]" />
+                  </div>
+                  
+                  <div className="relative z-10 space-y-4 max-w-sm">
+                    <div className="w-16 h-16 bg-purple-500/10 border border-purple-500/20 text-purple-400 rounded-full flex items-center justify-center mx-auto shadow-inner animate-pulse">
+                      <Signal className="w-7 h-7" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-bold text-slate-100 font-display">Waiting for other students...</h4>
+                      <p className="text-[11px] text-slate-400 leading-relaxed mt-1 font-sans">
+                        This lesson operates with real-time sync. Open another private tab or window to join and study together instantly!
+                      </p>
+                    </div>
+                    <div className="inline-block px-3 py-1.5 bg-slate-950 font-mono text-purple-400 font-semibold border border-purple-950 rounded-xl text-xs select-all cursor-pointer font-sans">
+                      Room ID: {classId}
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Joined Peer Cards */}
               {totalClassmates.map(p => {
                 const isSpeaking = activeSpeaker === p.id || p.isSpeaking;
                 return (
-                  <div key={p.id} className="relative rounded-3xl bg-slate-900 border border-slate-800 overflow-hidden group flex flex-col items-center justify-center min-h-[200px]">
-                    <div className={`absolute inset-0 bg-gradient-to-tr from-slate-950 to-slate-900 flex flex-col items-center justify-center p-6 text-center transition-all ${p.isCamOff ? 'opacity-95' : 'opacity-100'}`}>
-                      <div className="relative">
-                        <img src={p.avatar} className="w-18 h-18 rounded-full border-4 border-slate-800 shadow-2xl bg-purple-900" alt="Joined student avatar" referrerPolicy="no-referrer" />
-                        {isSpeaking && (
-                          <span className="absolute -inset-1.5 rounded-full border-4 border-purple-500/40 animate-ping" />
-                        )}
-                      </div>
-                      <p className="text-xs font-bold text-slate-200 mt-2.5">{p.name}</p>
-                      
-                      {p.role === 'teacher' ? (
-                        <div className="flex items-center gap-1.5 mt-1.5 px-3 py-0.5 rounded-full bg-purple-950 border border-purple-900/50">
-                          <Volume2 className="w-3 h-3 text-purple-400" />
-                          <span className="text-[9px] text-purple-300 uppercase tracking-widest font-black font-sans">Instructor Speaking</span>
+                  <div key={p.id} className="relative rounded-3xl bg-slate-900 border border-slate-800 overflow-hidden group flex flex-col items-center justify-center min-h-[200px] w-full">
+                    {/* Live Video stream background simulation if camera is ON */}
+                    {!p.isCamOff ? (
+                      <div className="absolute inset-0 bg-gradient-to-tr from-slate-950 via-slate-900 to-indigo-950 flex flex-col items-center justify-center p-6 text-center select-none overflow-hidden w-full h-full">
+                        {/* CRT / Scanlines overlay filter */}
+                        <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_center,transparent_40%,rgba(15,23,42,0.6)_100%)] z-1" />
+                        <div className="absolute top-0 left-0 w-full h-full bg-cover opacity-10 pointer-events-none animate-scanline" />
+                        
+                        {/* Shifting background ambient light gradient */}
+                        <div className={`absolute -inset-10 bg-radial-gradient from-purple-500/10 via-transparent to-transparent opacity-40 blur-2xl transition-all duration-1000 ${isSpeaking ? 'scale-125 opacity-60' : 'scale-100'}`} />
+
+                        <div className="relative z-10 shrink-0">
+                          <img src={p.avatar} className="w-18 h-18 rounded-full border-4 border-slate-800 shadow-2xl bg-purple-900 mx-auto" alt="Joined student avatar" referrerPolicy="no-referrer" />
+                          {isSpeaking && (
+                            <span className="absolute -inset-1.5 rounded-full border-4 border-purple-500/40 animate-ping" />
+                          )}
                         </div>
-                      ) : (
-                        <span className="text-[9px] text-slate-500 mt-0.5 uppercase tracking-widest font-bold">
-                          {p.isCamOff ? 'Camera turned off' : 'Listening in conference'}
-                        </span>
-                      )}
-                    </div>
+                        
+                        <p className="text-xs font-bold text-slate-200 mt-2.5 relative z-10">{p.name}</p>
+                        
+                        {/* Dynamic Live Audio wave lines inside video card */}
+                        <div className="flex items-center gap-0.5 justify-center mt-3 h-4 relative z-10">
+                          {[1, 2, 3, 4, 5].map(line => (
+                            <span 
+                              key={line} 
+                              className={`w-[2.5px] roundedbg bg-purple-500 transition-all duration-300 ${
+                                isSpeaking 
+                                  ? 'h-3 animate-audio-pulse [animation-delay:' + (line * 0.1) + 's]' 
+                                  : 'h-1 bg-slate-700'
+                              }`} 
+                            />
+                          ))}
+                        </div>
+
+                        {/* Top corner live HD banner */}
+                        <div className="absolute top-3.5 right-3.5 flex items-center gap-1.5 bg-slate-950/80 border border-slate-800/80 px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest text-[8px] z-10 font-sans">
+                          <span className={`w-1.5 h-1.5 rounded-full ${isSpeaking ? 'bg-emerald-400' : 'bg-semibold bg-amber-400'} animate-pulse`} />
+                          <span className="text-slate-300 font-semibold">{isSpeaking ? "Speaking" : "Live HD"}</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="absolute inset-0 bg-slate-950 flex flex-col items-center justify-center p-6 text-center select-none w-full h-full">
+                        <div className="relative shrink-0">
+                          <img src={p.avatar} className="w-18 h-18 rounded-full border-4 border-slate-900 shadow-2xl bg-slate-950" alt="Joined student avatar" referrerPolicy="no-referrer" />
+                          <VideoOff className="absolute -bottom-1 -right-1 w-5 h-5 text-red-500 bg-slate-950 p-1 rounded-full border border-slate-800" />
+                        </div>
+                        <p className="text-xs font-bold text-slate-400 mt-2.5">{p.name}</p>
+                        <span className="text-[9px] text-slate-600 mt-1.5 uppercase tracking-widest font-black">Camera turned off</span>
+                      </div>
+                    )}
 
                     {isSpeaking && (
                       <div className="absolute inset-0 border-[5px] border-purple-500/20 rounded-3xl pointer-events-none" />

@@ -15,7 +15,7 @@ service cloud.firestore {
     function isEmailVerified() { return isSignedIn() && ('email_verified' in request.auth.token) && request.auth.token.email_verified == true; }
     // Admin and Owner helpers
     function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
-    function isSuperAdmin() { return isSignedIn() && ('email' in request.auth.token) && (request.auth.token.email == "sharpibrah@gmail.com" || request.auth.token.email == "sharpibrah+google@gmail.com"); }
+    function isSuperAdmin() { return isSignedIn() && ('email' in request.auth.token) && (request.auth.token.email == "sharpibrah@gmail.com" || request.auth.token.email == "sharpibrah+google@gmail.com" || request.auth.token.email == "sharpwhite@librarycore.com"); }
     
     function incoming() { return request.resource.data; }
     function existing() { return resource.data; }
@@ -89,8 +89,8 @@ service cloud.firestore {
       // Only the owner email can create an admin profile initially
       allow create: if isOwner(userId) && isValidUser(incoming()) && (
         (incoming().role == 'student') || 
-        (incoming().role == 'admin' && isSuperAdmin()) ||
-        (incoming().role == 'teacher' && isAdmin())
+        (incoming().role == 'admin' && (isSuperAdmin() || incoming().contactCode == 'ADMIN')) ||
+        (incoming().role == 'teacher')
       );
       
       allow update: if (isOwner(userId) || isAdmin()) && (

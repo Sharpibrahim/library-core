@@ -115,51 +115,53 @@ export function UploadSection({ user, onUploadComplete }: UploadSectionProps) {
         fileSize = file.size;
 
         if (isOnline) {
-          console.log('[UPLOAD] Uploading file directly to Express backend server with progress tracking...');
+          console.log('[UPLOAD] Uploading file to server backend /api/upload...');
+          setProgress(20);
           
-          const result = await new Promise<any>((resolve, reject) => {
-            const xhr = new XMLHttpRequest();
-            const localFormData = new FormData();
-            localFormData.append('file', file);
-            localFormData.append('title', formData.title);
-            localFormData.append('author', formData.author);
-            localFormData.append('type', type);
-            localFormData.append('description', formData.description || '');
-            localFormData.append('cover_url', coverUrl);
-            localFormData.append('genre', formData.category);
+          const uploadFormData = new FormData();
+          uploadFormData.append('file', file);
+          
+          const uploadRes = await fetch('/api/upload', {
+            method: 'POST',
+            body: uploadFormData
+          });
+          
+          if (!uploadRes.ok) {
+            const uploadErrText = await uploadRes.text();
+            throw new Error(`Server upload failed: ${uploadErrText}`);
+          }
+          
+          setProgress(60);
+          const uploadData = await uploadRes.json();
+          const serverFileUrl = uploadData.url; // e.g., /uploads/123456-file.pdf
+          console.log(`[UPLOAD] Server uploaded successfully: ${serverFileUrl}`);
 
-            // Track upload stream progress accurately
-            xhr.upload.addEventListener('progress', (event) => {
-              if (event.lengthComputable) {
-                const percent = Math.round((event.loaded / event.total) * 100);
-                // Clamp progression at 95% until server-side Firebase upload and SQLite insertion respond
-                setProgress(Math.min(95, percent));
-              }
-            });
-
-            xhr.addEventListener('load', () => {
-              if (xhr.status >= 200 && xhr.status < 300) {
-                try {
-                  const data = JSON.parse(xhr.responseText);
-                  resolve(data);
-                } catch (err) {
-                  reject(new Error('Invalid JSON response from upload server.'));
-                }
-              } else {
-                reject(new Error(`Server upload failed with status ${xhr.status}: ${xhr.responseText}`));
-              }
-            });
-
-            xhr.addEventListener('error', () => {
-              reject(new Error('Network error during file transmission.'));
-            });
-
-            xhr.open('POST', '/api/resources');
-            xhr.send(localFormData);
+          // Register in backend SQLite database
+          const response = await fetch('/api/resources', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              title: formData.title,
+              author: formData.author,
+              type: type,
+              description: formData.description || '',
+              cover_url: coverUrl,
+              genre: formData.category,
+              body_file_url: serverFileUrl
+            })
           });
 
-          fileUrl = result.file_url;
-          console.log(`[UPLOAD] Server-side permanent upload successful. URL: ${fileUrl}`);
+          if (!response.ok) {
+            const errText = await response.text();
+            throw new Error(`Server registration failed: ${errText}`);
+          }
+
+          setProgress(80);
+          const result = await response.json();
+          fileUrl = result.file_url || serverFileUrl;
+          console.log(`[UPLOAD] Server-side registration successful. URL: ${fileUrl}`);
 
           // Sync into Firestore for immediate client-side and collaborative stream updates
           await addDoc(collection(db, 'resources'), {
