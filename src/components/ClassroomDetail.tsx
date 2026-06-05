@@ -26,6 +26,37 @@ export function ClassroomDetail({ classId, user, onBack }: ClassroomDetailProps)
   const [isAddTopicModalOpen, setIsAddTopicModalOpen] = useState(false);
   const [newTopicTitle, setNewTopicTitle] = useState('');
   const [activeAssignmentId, setActiveAssignmentId] = useState<string | null>(null);
+  const [assignmentDetails, setAssignmentDetails] = useState<any | null>(null);
+  const [submissionText, setSubmissionText] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [uploadedFileUrl, setUploadedFileUrl] = useState<string | null>(null);
+  const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
+  const [gradingSubmissionId, setGradingSubmissionId] = useState<string | null>(null);
+  const [feedbackText, setFeedbackText] = useState('');
+  const [gradingStatus, setGradingStatus] = useState<'completed' | 'needs_improvement'>('completed');
+
+  useEffect(() => {
+    if (!activeAssignmentId) {
+      setAssignmentDetails(null);
+      setSubmissionText('');
+      setUploadedFileUrl(null);
+      setUploadedFileName(null);
+      return;
+    }
+    const fetchAssignment = async () => {
+      try {
+        const res = await fetch(`/api/assignments/${activeAssignmentId}`);
+        if (res.ok) {
+          const data = await res.json();
+          setAssignmentDetails(data);
+        }
+      } catch (err) {
+        console.error("Failed to fetch assignment details:", err);
+      }
+    };
+    fetchAssignment();
+  }, [activeAssignmentId]);
 
   const fetchData = async () => {
      try {
@@ -103,50 +134,363 @@ export function ClassroomDetail({ classId, user, onBack }: ClassroomDetailProps)
   if (!cls) return <div className="p-8 text-center text-gray-500 font-medium">Loading classroom...</div>;
 
    if (activeAssignmentId) {
+      const localAssignment = cls.unorganizedAssignments?.find((a: any) => String(a.id) === String(activeAssignmentId)) ||
+         cls.topics?.flatMap((t: any) => t.assignments || []).find((a: any) => String(a.id) === String(activeAssignmentId));
+      
+      const displayTitle = assignmentDetails?.title || localAssignment?.title || 'Assignment Details';
+      const displayDesc = assignmentDetails?.description || localAssignment?.description || '';
+      const displayType = assignmentDetails?.assignment_type || localAssignment?.assignment_type || 'homework';
+
+      const mySubmission = assignmentDetails?.submissions?.find((s: any) => String(s.student_id) === String(user.uid));
+
+      const handleAttachFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+         const file = e.target.files?.[0];
+         if (!file) return;
+         
+         setIsUploading(true);
+         const formData = new FormData();
+         formData.append('file', file);
+         
+         try {
+            const res = await fetch('/api/upload', {
+               method: 'POST',
+               body: formData,
+            });
+            if (res.ok) {
+               const data = await res.json();
+               setUploadedFileUrl(data.url);
+               setUploadedFileName(file.name);
+            } else {
+               alert("Failed to upload document file.");
+            }
+         } catch (err) {
+            console.error(err);
+            alert("Error uploading file.");
+         } finally {
+            setIsUploading(false);
+         }
+      };
+
+      const handleTurnIn = async () => {
+         setIsSubmitting(true);
+         try {
+            const res = await fetch(`/api/assignments/${activeAssignmentId}/submissions`, {
+               method: 'POST',
+               headers: { 'Content-Type': 'application/json' },
+               body: JSON.stringify({
+                  student_id: user.uid,
+                  content: submissionText,
+                  file_url: uploadedFileUrl
+               })
+            });
+            if (res.ok) {
+               alert("Assignment submitted successfully!");
+               // Reload assignment details to fetch updated submissions list
+               const detailRes = await fetch(`/api/assignments/${activeAssignmentId}`);
+               if (detailRes.ok) {
+                  setAssignmentDetails(await detailRes.json());
+               }
+               setSubmissionText('');
+               setUploadedFileUrl(null);
+               setUploadedFileName(null);
+            } else {
+               alert("Failed to turn in assignment.");
+            }
+         } catch (err) {
+            console.error(err);
+            alert("Error turning in assignment.");
+         } finally {
+            setIsSubmitting(false);
+         }
+      };
+
+      const handleGradeSubmission = async (submissionId: string) => {
+         try {
+            const res = await fetch(`/api/submissions/${submissionId}/grade`, {
+               method: 'POST',
+               headers: { 'Content-Type': 'application/json' },
+               body: JSON.stringify({
+                  status: gradingStatus,
+                  feedback: feedbackText
+               })
+            });
+            if (res.ok) {
+               alert("Submission graded successfully!");
+               setGradingSubmissionId(null);
+               setFeedbackText('');
+               // Reload assignment details to fetch updated list
+               const detailRes = await fetch(`/api/assignments/${activeAssignmentId}`);
+               if (detailRes.ok) {
+                  setAssignmentDetails(await detailRes.json());
+               }
+            } else {
+               alert("Failed to grade submission.");
+            }
+         } catch (err) {
+            console.error(err);
+            alert("Error grading submission.");
+         }
+      };
+
       return (
          <div className="max-w-[1000px] mx-auto w-full font-sans pb-24 animate-in fade-in">
             <button onClick={() => setActiveAssignmentId(null)} className="flex items-center gap-2 text-gray-500 hover:text-gray-900 font-bold mb-6 transition-colors rounded-xl px-2 py-1 -ml-2 hover:bg-gray-100">
                <ArrowLeft className="w-5 h-5" /> Back to Classwork
             </button>
-            <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-8">
-               <div className="flex items-start gap-4 mb-8 border-b border-gray-100 pb-8">
+            
+            <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-8 space-y-8">
+               {/* Header */}
+               <div className="flex items-start gap-4 border-b border-gray-100 pb-8">
                   <div className="w-12 h-12 bg-purple-100 text-purple-600 rounded-full flex items-center justify-center shrink-0">
                      <FileText className="w-6 h-6" />
                   </div>
-                  <div>
-                     <h2 className="text-3xl font-bold text-gray-900 mb-2">Assignment Details</h2>
-                     <p className="text-gray-500 font-medium">Please follow the instructions carefully.</p>
+                  <div className="flex-1">
+                     <div className="flex items-center gap-2 mb-1">
+                        <span className="uppercase text-[10px] font-black tracking-widest text-purple-600 bg-purple-50 px-2.5 py-1 rounded-md">{displayType}</span>
+                        {localAssignment?.due_date && (
+                           <span className="text-xs text-slate-500 flex items-center gap-1">
+                              <Clock className="w-3.5 h-3.5" /> Due {new Date(localAssignment.due_date).toLocaleDateString()}
+                           </span>
+                        )}
+                     </div>
+                     <h2 className="text-3xl font-bold text-gray-900">{displayTitle}</h2>
                   </div>
                </div>
                
-               <div className="prose max-w-none text-gray-800 mb-8">
-                  <p>Here you would see the full description, instructions, and any attached resources.</p>
+               {/* Description */}
+               <div>
+                  <h3 className="text-lg font-bold text-gray-900 mb-3">Instructions</h3>
+                  <div className="prose max-w-none text-gray-700 bg-slate-50 border border-slate-100 p-6 rounded-2xl whitespace-pre-wrap">
+                     {displayDesc || "No instructions provided for this assignment."}
+                  </div>
                </div>
 
                {!isTeacher ? (
-                  <div className="border-t border-gray-100 pt-8 mt-8">
+                  <div className="border-t border-gray-100 pt-8">
                      <h3 className="text-xl font-bold text-gray-900 mb-4">Your Work</h3>
+                     
+                     {mySubmission && (
+                       <div className="bg-purple-50/50 border border-purple-100 rounded-2xl p-6 mb-6">
+                          <div className="flex items-center justify-between mb-4">
+                             <span className="text-sm font-semibold text-slate-500">Already Submitted On {new Date(mySubmission.submitted_at).toLocaleString()}</span>
+                             <span className={`px-3 py-1 text-xs font-bold rounded-full uppercase tracking-wider ${
+                                mySubmission.status === 'completed' 
+                                  ? 'bg-green-100 text-green-700' 
+                                  : mySubmission.status === 'needs_improvement' 
+                                  ? 'bg-amber-100 text-amber-700' 
+                                  : 'bg-blue-100 text-blue-700'
+                             }`}>
+                                {mySubmission.status}
+                             </span>
+                          </div>
+                          
+                          <div className="bg-white border border-purple-100 rounded-xl p-4 mb-4 whitespace-pre-wrap text-sm text-slate-700">
+                             {mySubmission.content || <span className="italic text-slate-400">No text answer provided.</span>}
+                          </div>
+
+                          {mySubmission.file_url ? (
+                             <div className="flex items-center justify-between bg-white border border-slate-200 rounded-xl p-4 mb-4">
+                                <div className="flex items-center gap-2">
+                                   <FileText className="w-5 h-5 text-purple-600" />
+                                   <span className="text-sm font-semibold text-slate-700">Attached File Attachment</span>
+                                </div>
+                                <a 
+                                   href={mySubmission.file_url} 
+                                   target="_blank" 
+                                   rel="noreferrer" 
+                                   className="px-4 py-1.5 bg-purple-605 hover:bg-purple-700 text-white text-xs font-bold rounded-lg transition-colors inline-block"
+                                >
+                                   View File Content
+                                </a>
+                             </div>
+                          ) : (
+                             <p className="text-xs text-slate-500 mb-4 italic">No document file attached.</p>
+                          )}
+
+                          {mySubmission.feedback && (
+                             <div className="bg-amber-50 border border-amber-100 rounded-xl p-4 mt-2">
+                                <p className="text-xs font-bold text-amber-800 uppercase tracking-wider mb-1">Teacher Feedback</p>
+                                <p className="text-sm text-amber-900">{mySubmission.feedback}</p>
+                             </div>
+                          )}
+                       </div>
+                     )}
+
                      <div className="bg-gray-50 border border-gray-200 rounded-2xl p-6">
-                        <textarea 
-                           placeholder="Type your answer here or attach a file..." 
-                           className="w-full bg-white border border-gray-200 rounded-xl p-4 min-h-[150px] resize-none focus:outline-none focus:ring-2 focus:ring-purple-600 mb-4"
-                        />
-                        <div className="flex justify-between items-center">
-                           <button className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-700 font-bold rounded-lg hover:border-purple-500 transition-colors shadow-sm">
-                              <Upload className="w-4 h-4" /> Upload File
-                           </button>
-                           <button className="px-8 py-3 bg-purple-600 text-white font-bold rounded-xl hover:bg-purple-700 shadow-lg shadow-purple-600/20 transition-colors">
-                              Turn In
-                           </button>
-                        </div>
+                       <textarea 
+                          placeholder="Type your answer, observations, or response detail here..." 
+                          value={submissionText}
+                          onChange={e => setSubmissionText(e.target.value)}
+                          className="w-full bg-white border border-gray-200 rounded-xl p-4 min-h-[150px] resize-none focus:outline-none focus:ring-2 focus:ring-purple-600 mb-4 font-sans text-sm text-slate-805 text-slate-800"
+                       />
+                       
+                       {/* Selected file notification badge */}
+                       {uploadedFileUrl && (
+                          <div className="flex items-center justify-between bg-white border border-emerald-100 rounded-xl p-4 mb-4">
+                             <div className="flex items-center gap-2">
+                                <FileText className="w-5 h-5 text-emerald-600 animate-pulse" />
+                                <div>
+                                   <span className="text-sm font-bold text-slate-700 block">{uploadedFileName || 'Document PDF ready'}</span>
+                                   <span className="text-xs text-emerald-600 font-medium">Successfully uploaded & attached!</span>
+                                </div>
+                             </div>
+                             <button 
+                                onClick={() => {
+                                   setUploadedFileUrl(null);
+                                   setUploadedFileName(null);
+                                }}
+                                className="text-xs text-red-500 hover:underline font-bold"
+                             >
+                                Remove
+                             </button>
+                          </div>
+                       )}
+
+                       <div className="flex justify-between items-center">
+                          <input 
+                             type="file" 
+                             id="assignment-file-input" 
+                             accept=".pdf,.doc,.docx" 
+                             className="hidden" 
+                             onChange={handleAttachFile} 
+                          />
+                          
+                          <button 
+                             type="button"
+                             onClick={() => document.getElementById('assignment-file-input')?.click()}
+                             disabled={isUploading}
+                             className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-700 font-bold rounded-lg hover:border-purple-500 transition-colors shadow-sm disabled:opacity-50 cursor-pointer text-xs"
+                          >
+                             {isUploading ? (
+                                <span className="flex items-center gap-1 text-purple-600 animate-pulse">
+                                   Uploading Document...
+                                </span>
+                             ) : (
+                                <>
+                                   <Upload className="w-4 h-4 text-purple-600" /> Attach PDF / Document
+                                </>
+                             )}
+                          </button>
+
+                          <button 
+                             onClick={handleTurnIn}
+                             disabled={isSubmitting || isUploading || (!submissionText.trim() && !uploadedFileUrl)}
+                             className="px-8 py-3 bg-purple-600 text-white font-bold rounded-xl hover:bg-purple-700 shadow-lg shadow-purple-600/20 transition-colors disabled:opacity-50 cursor-pointer"
+                          >
+                             {isSubmitting ? 'Turning In...' : mySubmission ? 'Resubmit Assignment' : 'Turn In'}
+                          </button>
+                       </div>
                      </div>
                   </div>
                ) : (
                   <div className="border-t border-gray-100 pt-8 mt-8">
-                     <h3 className="text-xl font-bold text-gray-900 mb-4">Student Submissions</h3>
-                     <div className="text-center py-12 text-gray-400 font-medium bg-gray-50 rounded-2xl border border-gray-200">
-                        No submissions yet.
-                     </div>
+                     <h3 className="text-xl font-bold text-gray-900 mb-6">Student Submissions ({assignmentDetails?.submissions?.length || 0})</h3>
+                     
+                     {(!assignmentDetails?.submissions || assignmentDetails.submissions.length === 0) ? (
+                        <div className="text-center py-12 text-gray-400 font-medium bg-gray-50 rounded-2xl border border-gray-200">
+                           No submissions yet for this classroom assignment.
+                        </div>
+                     ) : (
+                        <div className="space-y-4">
+                           {assignmentDetails.submissions.map((sub: any) => (
+                              <div key={sub.id} className="bg-slate-50 border border-slate-200 rounded-2xl p-6">
+                                 <div className="flex items-start justify-between mb-4">
+                                    <div>
+                                       <h4 className="font-bold text-gray-900 text-base">{sub.student_name || 'Class Student'}</h4>
+                                       <p className="text-xs text-slate-500">Submitted at {new Date(sub.submitted_at).toLocaleString()}</p>
+                                    </div>
+                                    <span className={`px-2.5 py-1 text-xs font-bold rounded-full uppercase tracking-wider ${
+                                       sub.status === 'completed' 
+                                         ? 'bg-green-100 text-green-700' 
+                                         : sub.status === 'needs_improvement' 
+                                         ? 'bg-amber-100 text-amber-700' 
+                                         : 'bg-blue-100 text-blue-700'
+                                    }`}>
+                                       {sub.status}
+                                    </span>
+                                 </div>
+
+                                 <div className="bg-white border border-slate-150 rounded-xl p-4 mb-4 text-sm text-slate-800 whitespace-pre-wrap">
+                                    {sub.content || <span className="italic text-slate-400">No text answer.</span>}
+                                 </div>
+
+                                 {sub.file_url && (
+                                    <div className="flex items-center justify-between bg-white border border-slate-200 rounded-xl p-3 mb-4 mt-2">
+                                       <div className="flex items-center gap-2">
+                                          <FileText className="w-5 h-5 text-purple-605" />
+                                          <span className="text-xs font-semibold text-slate-700">Attached Student Document (PDF)</span>
+                                       </div>
+                                       <a 
+                                          href={sub.file_url} 
+                                          target="_blank" 
+                                          rel="noreferrer" 
+                                          className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded-lg transition-colors inline-block text-center"
+                                       >
+                                          View Submitted PDF
+                                       </a>
+                                    </div>
+                                 )}
+
+                                 {sub.feedback && (
+                                    <div className="bg-amber-50 rounded-xl p-4 border border-amber-100 mb-4 mt-2">
+                                       <p className="text-xs font-bold text-amber-800 uppercase tracking-widest mb-1">Teacher Feedback</p>
+                                       <p className="text-sm text-amber-900">{sub.feedback}</p>
+                                    </div>
+                                 )}
+
+                                 {gradingSubmissionId === sub.id ? (
+                                    <div className="bg-white border border-purple-100 p-4 rounded-xl mt-4 space-y-3">
+                                       <p className="text-xs font-bold text-purple-800 uppercase tracking-widest">Grade and Provide Feedback</p>
+                                       <textarea 
+                                          placeholder="Provide personalized, constructive comments..." 
+                                          value={feedbackText}
+                                          onChange={e => setFeedbackText(e.target.value)}
+                                          className="w-full bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm focus:outline-none focus:ring-1 focus:ring-purple-600 min-h-[80px]"
+                                       />
+                                       <div className="flex items-center justify-between">
+                                          <div className="flex items-center gap-3">
+                                             <label className="text-xs font-bold text-slate-500">Status:</label>
+                                             <select 
+                                                value={gradingStatus} 
+                                                onChange={e => setGradingStatus(e.target.value as any)}
+                                                className="bg-slate-50 border border-slate-200 text-xs rounded-lg p-1.5 font-semibold text-slate-700"
+                                             >
+                                                <option value="completed">Completed / Approved</option>
+                                                <option value="needs_improvement">Needs Improvement</option>
+                                             </select>
+                                          </div>
+                                          <div className="flex gap-2">
+                                             <button 
+                                                onClick={() => setGradingSubmissionId(null)}
+                                                className="px-3 py-1.5 text-xs text-slate-500 font-bold hover:bg-slate-50 rounded-lg transition-colors"
+                                             >
+                                                Cancel
+                                             </button>
+                                             <button 
+                                                onClick={() => handleGradeSubmission(sub.id)}
+                                                className="px-4 py-1.5 bg-purple-600 text-white text-xs font-bold rounded-lg hover:bg-purple-700 transition-colors"
+                                             >
+                                                Submit Grade
+                                             </button>
+                                          </div>
+                                       </div>
+                                    </div>
+                                 ) : (
+                                    <button 
+                                       onClick={() => {
+                                          setGradingSubmissionId(sub.id);
+                                          setFeedbackText(sub.feedback || '');
+                                          setGradingStatus(sub.status === 'needs_improvement' ? 'needs_improvement' : 'completed');
+                                       }}
+                                       className="text-xs bg-white border border-slate-200 hover:border-purple-600 text-purple-600 hover:bg-purple-50/25 px-4 py-2 rounded-lg font-bold transition-all cursor-pointer mt-2"
+                                    >
+                                       {sub.feedback ? 'Update Grade/Feedback' : 'Grade Assignment'}
+                                    </button>
+                                 )}
+                              </div>
+                           ))}
+                        </div>
+                     )}
                   </div>
                )}
             </div>

@@ -2018,13 +2018,13 @@ app.get('/api/assignments/:id', (req, res) => {
 app.post('/api/assignments/:id/submissions', (req, res) => {
   try {
     const { id } = req.params;
-    const { student_id, content } = req.body;
+    const { student_id, content, file_url } = req.body;
     
     const existing = db.prepare('SELECT id FROM class_submissions WHERE assignment_id = ? AND student_id = ?').get(id, student_id);
     if (existing) {
-       db.prepare('UPDATE class_submissions SET content = ?, status = "submitted", submitted_at = CURRENT_TIMESTAMP WHERE assignment_id = ? AND student_id = ?').run(content, id, student_id);
+       db.prepare('UPDATE class_submissions SET content = ?, file_url = ?, status = "submitted", submitted_at = CURRENT_TIMESTAMP WHERE assignment_id = ? AND student_id = ?').run(content, file_url || null, id, student_id);
     } else {
-       db.prepare('INSERT INTO class_submissions (assignment_id, student_id, content) VALUES (?, ?, ?)').run(id, student_id, content);
+       db.prepare('INSERT INTO class_submissions (assignment_id, student_id, content, file_url) VALUES (?, ?, ?, ?)').run(id, student_id, content, file_url || null);
     }
     res.json({ success: true });
   } catch (error) {

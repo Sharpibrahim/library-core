@@ -712,126 +712,125 @@ export default function App() {
         />
 
         <main className="p-4 sm:p-8 lg:p-10 max-w-none mx-auto w-full">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={activeTab}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.4, ease: "easeOut" }}
-              className="w-full"
-            >
-              {activeTab === 'dashboard' && (
-                <StudyDashboard 
-                  user={currentUser} 
-                  resources={resources} 
-                  onOpenResource={setReadingResource} 
-                  onOpenCourse={async (course) => {
-                    // Fetch full course data
-                    try {
-                      const res = await fetch(`/api/courses/${course.id}`);
-                      if (res.ok) {
-                        const fullCourse = await res.json();
-                        setSelectedDashboardCourse(fullCourse);
-                      }
-                    } catch (e) {
-                      console.error(e);
+          <div className="w-full">
+            <div style={{ display: activeTab === 'dashboard' ? 'block' : 'none' }}>
+              <StudyDashboard 
+                user={currentUser} 
+                resources={resources} 
+                onOpenResource={setReadingResource} 
+                onOpenCourse={async (course) => {
+                  // Fetch full course data
+                  try {
+                    const res = await fetch(`/api/courses/${course.id}`);
+                    if (res.ok) {
+                      const fullCourse = await res.json();
+                      setSelectedDashboardCourse(fullCourse);
                     }
-                  }}
+                  } catch (e) {
+                    console.error(e);
+                  }
+                }}
+              />
+            </div>
+
+            <div style={{ display: activeTab === 'library' ? 'block' : 'none' }}>
+              <LibraryView 
+                resources={resources} 
+                user={currentUser}
+                onRead={setReadingResource} 
+                onDelete={handleDelete}
+                externalSearchQuery={searchQuery}
+                setSearchQuery={setSearchQuery}
+                createNotification={createNotification}
+              />
+            </div>
+
+            <div style={{ display: activeTab === 'ai-assistant' ? 'block' : 'none' }}>
+              <AIAssistantView user={currentUser} />
+            </div>
+
+            <div style={{ display: activeTab === 'notifications' ? 'block' : 'none' }}>
+              <NotificationsView 
+                notifications={notifications}
+                onMarkRead={handleMarkRead}
+                onMarkAllRead={handleMarkAllRead}
+                onClearAll={handleClearAll}
+                onDelete={handleDeleteNotification}
+              />
+            </div>
+
+            <div style={{ display: activeTab === 'upload' ? 'block' : 'none' }}>
+              <div className="max-w-4xl mx-auto py-8">
+                <UploadSection 
+                  user={currentUser} 
+                  onUploadComplete={() => {
+                    setActiveTab('library');
+                  }} 
                 />
-              )}
+              </div>
+            </div>
 
-              {activeTab === 'library' && (
-                <LibraryView 
-                  resources={resources} 
-                  user={currentUser}
-                  onRead={setReadingResource} 
-                  onDelete={handleDelete}
-                  externalSearchQuery={searchQuery}
-                  setSearchQuery={setSearchQuery}
-                  createNotification={createNotification}
-                />
-              )}
+            <div style={{ display: activeTab === 'history' ? 'block' : 'none' }}>
+              <HistoryView />
+            </div>
 
-              {activeTab === 'ai-assistant' && (
-                <AIAssistantView user={currentUser} />
-              )}
-
-              {activeTab === 'notifications' && (
-                <NotificationsView 
-                  notifications={notifications}
-                  onMarkRead={handleMarkRead}
-                  onMarkAllRead={handleMarkAllRead}
-                  onClearAll={handleClearAll}
-                  onDelete={handleDeleteNotification}
-                />
-              )}
-
-              {activeTab === 'upload' && (
-                <div className="max-w-4xl mx-auto py-8">
-                  <UploadSection 
-                    user={currentUser} 
-                    onUploadComplete={() => {
-                      setActiveTab('library');
-                    }} 
-                  />
-                </div>
-              )}
-
-              {activeTab === 'history' && <HistoryView />}
-
-              {activeTab === 'admin-panel' && (
+            <div style={{ display: activeTab === 'admin-panel' ? 'block' : 'none' }}>
+              {currentUser && (
                 <LMSAdmin 
-                  user={currentUser!}
+                  user={currentUser}
                   onAddClick={() => setActiveTab('upload')} 
                   resources={resources}
                   onDeleteResource={handleDelete}
                 />
               )}
+            </div>
 
-              {activeTab === 'classrooms' && <ClassroomList user={currentUser} />}
-              
-              {activeTab === 'courses' && <CoursesView user={currentUser} />}
+            <div style={{ display: activeTab === 'classrooms' ? 'block' : 'none' }}>
+              <ClassroomList user={currentUser} />
+            </div>
+            
+            <div style={{ display: activeTab === 'courses' ? 'block' : 'none' }}>
+              <CoursesView user={currentUser} />
+            </div>
 
-              {activeTab === 'quizzes' && (
-                <QuizzesView user={currentUser} />
-              )}
+            <div style={{ display: activeTab === 'quizzes' ? 'block' : 'none' }}>
+              <QuizzesView user={currentUser} />
+            </div>
 
-              {activeTab === 'messages' && (
-                <ExpertChatView user={currentUser} />
-              )}
+            <div style={{ display: activeTab === 'messages' ? 'block' : 'none' }}>
+              <ExpertChatView user={currentUser} />
+            </div>
 
-              {activeTab === 'settings' && (
-                <SettingsView 
-                  user={currentUser} 
-                  theme={theme}
-                  onThemeChange={toggleTheme}
-                  onUserUpdate={(updatedUser) => setCurrentUser(updatedUser)}
-                />
-              )}
+            <div style={{ display: activeTab === 'settings' ? 'block' : 'none' }}>
+              <SettingsView 
+                user={currentUser} 
+                theme={theme}
+                onThemeChange={toggleTheme}
+                onUserUpdate={(updatedUser) => setCurrentUser(updatedUser)}
+              />
+            </div>
 
-              {activeTab === 'user-manual' && (
-                <UserManualView />
-              )}
+            <div style={{ display: activeTab === 'user-manual' ? 'block' : 'none' }}>
+              <UserManualView />
+            </div>
 
-              {/* Placeholder for other tabs */}
-              {['shelf', 'notes', 'papers', 'progress', 'profile', 'assignments', 'analytics', 'search'].includes(activeTab) && (
-                <div className="flex flex-col items-center justify-center py-32 text-center">
-                  <div className="w-24 h-24 bg-black/5 dark:bg-white/5 rounded-[2.5rem] flex items-center justify-center text-slate-500 mb-6 border border-slate-200 dark:border-white/10">
-                    <Library className="w-12 h-12" />
-                  </div>
-                  <h2 className="text-3xl font-display font-bold text-text-main mb-2 capitalize">{activeTab.replace('-', ' ')}</h2>
-                  <p className="text-slate-500 max-w-md font-medium">This section is currently under development. Stay tuned for exciting new features!</p>
-                  <button 
-                    onClick={() => setActiveTab('dashboard')}
-                    className="mt-8 btn-primary px-8 py-3"
-                  >
-                    Back to Dashboard
-                  </button>
+            {/* Placeholder for other tabs */}
+            <div style={{ display: ['shelf', 'notes', 'papers', 'progress', 'profile', 'assignments', 'analytics', 'search'].includes(activeTab) ? 'block' : 'none' }}>
+              <div className="flex flex-col items-center justify-center py-32 text-center">
+                <div className="w-24 h-24 bg-black/5 dark:bg-white/5 rounded-[2.5rem] flex items-center justify-center text-slate-500 mb-6 border border-slate-200 dark:border-white/10">
+                  <Library className="w-12 h-12" />
                 </div>
-              )}
-            </motion.div>
-          </AnimatePresence>
+                <h2 className="text-3xl font-display font-bold text-text-main mb-2 capitalize">{activeTab.replace('-', ' ')}</h2>
+                <p className="text-slate-500 max-w-md font-medium">This section is currently under development. Stay tuned for exciting new features!</p>
+                <button 
+                  onClick={() => setActiveTab('dashboard')}
+                  className="mt-8 btn-primary px-8 py-3"
+                >
+                  Back to Dashboard
+                </button>
+              </div>
+            </div>
+          </div>
         </main>
       </div>
 

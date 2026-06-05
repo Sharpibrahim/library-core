@@ -96,7 +96,7 @@ export function ClassroomConference({ classId, className, user, onLeave }: Class
   // Real presence & simulated peers
   const [realPeers, setRealPeers] = useState<Participant[]>([]);
   const [simulatedPeers, setSimulatedPeers] = useState<Participant[]>([]);
-  const [enableSandboxMockPeers, setEnableSandboxMockPeers] = useState(true);
+  const [enableSandboxMockPeers, setEnableSandboxMockPeers] = useState(false);
   const [toasts, setToasts] = useState<ClassroomToast[]>([]);
   
   const [activeSpeaker, setActiveSpeaker] = useState<string | null>(null);
