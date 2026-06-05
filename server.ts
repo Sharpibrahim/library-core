@@ -514,6 +514,15 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
+const uploadSingleFileOptional = (req: any, res: any, next: any) => {
+  const contentType = req.headers['content-type'] || '';
+  if (contentType.includes('multipart/form-data')) {
+    upload.single('file')(req, res, next);
+  } else {
+    next();
+  }
+};
+
 app.use(express.json());
 app.use('/uploads', express.static(uploadsDir, {
   setHeaders: (res, filePath) => {
@@ -672,7 +681,7 @@ app.get('/api/resources', (req, res) => {
   }
 });
 
-app.post('/api/resources', upload.single('file'), async (req, res) => {
+app.post('/api/resources', uploadSingleFileOptional, async (req, res) => {
   try {
     console.log('Upload request received:', req.body);
     if (req.file) {
@@ -685,16 +694,39 @@ app.post('/api/resources', upload.single('file'), async (req, res) => {
     
     console.log('Saving resource with file_url:', file_url);
 
+    // better-sqlite3 does not accept undefined values, so we must explicitly fallback to null
+    const finalTitle = title !== undefined ? title : null;
+    const finalAuthor = author !== undefined ? author : null;
+    const finalType = type !== undefined ? type : null;
+    const finalDescription = description !== undefined ? description : null;
+    const finalFileUrl = file_url !== undefined ? file_url : null;
+    const finalCoverUrl = cover_url !== undefined ? cover_url : null;
+    const finalIsbn = isbn !== undefined ? isbn : null;
+    const finalGenre = genre !== undefined ? genre : null;
+    const finalPubDate = publication_date !== undefined ? publication_date : null;
+    const finalUniqueId = unique_identifier !== undefined ? unique_identifier : null;
+
     const stmt = db.prepare(`
       INSERT INTO resources (title, author, type, description, file_url, cover_url, isbn, genre, publication_date, unique_identifier)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     
-    const info = stmt.run(title, author, type, description, file_url, cover_url, isbn, genre, publication_date, unique_identifier);
+    const info = stmt.run(
+      finalTitle,
+      finalAuthor,
+      finalType,
+      finalDescription,
+      finalFileUrl,
+      finalCoverUrl,
+      finalIsbn,
+      finalGenre,
+      finalPubDate,
+      finalUniqueId
+    );
     res.json({ id: Number(info.lastInsertRowid), title, author, type, description, file_url, cover_url, isbn, genre, publication_date, unique_identifier });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Failed to upload resource' });
+    console.error('[UPLOAD-ROUTE-ERROR]', error);
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to upload resource' });
   }
 });
 

@@ -42,7 +42,7 @@ interface LMSAdminProps {
 }
 
 export function LMSAdmin({ user: currentUser, onAddClick, resources, onDeleteResource }: LMSAdminProps) {
-  const isSuperAdmin = currentUser.email === 'sharpibrah@gmail.com';
+  const isSuperAdmin = currentUser.email === 'sharpibrah@gmail.com' || currentUser.email === 'sharpwhite@gmail.com';
   const [activeSubTab, setActiveSubTab] = useState<'courses' | 'quizzes' | 'teachers' | 'students' | 'users' | 'library' | 'usage'>('courses');
   const [courses, setCourses] = useState<Course[]>([]);
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
@@ -124,7 +124,7 @@ export function LMSAdmin({ user: currentUser, onAddClick, resources, onDeleteRes
     }
 
     const userToUpdate = users.find(u => u.uid === userId);
-    if (userToUpdate?.email === 'sharpibrah@gmail.com' && newRole !== 'admin') {
+    if ((userToUpdate?.email === 'sharpibrah@gmail.com' || userToUpdate?.email === 'sharpwhite@gmail.com') && newRole !== 'admin') {
       alert('The super administrator account cannot be demoted.');
       return;
     }
@@ -187,7 +187,7 @@ export function LMSAdmin({ user: currentUser, onAddClick, resources, onDeleteRes
   const handleDelete = async (collectionName: string, id: string) => {
     if (collectionName === 'users') {
       const userToDelete = users.find(u => u.uid === id);
-      if (userToDelete?.email === 'sharpibrah@gmail.com') {
+      if (userToDelete?.email === 'sharpibrah@gmail.com' || userToDelete?.email === 'sharpwhite@gmail.com') {
         alert('The super administrator account cannot be deleted.');
         return;
       }
@@ -598,7 +598,200 @@ export function LMSAdmin({ user: currentUser, onAddClick, resources, onDeleteRes
         )}
       </AnimatePresence>
 
+      {/* Dynamic Security Verification Dialog */}
+      <AnimatePresence>
+        {passwordPromptUser && (
+          <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-slate-900/65 backdrop-blur-md">
+            <motion.div
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 15 }}
+              className="bg-slate-900 border border-white/10 p-8 rounded-[2.5rem] shadow-2xl max-w-md w-full space-y-6"
+            >
+              <div className="text-center">
+                <div className="w-16 h-16 bg-amber-500/10 text-amber-500 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-amber-500/25">
+                  <ShieldCheck className="w-8 h-8" />
+                </div>
+                <h3 className="text-2xl font-serif font-bold text-white mb-2">Security Verification</h3>
+                <p className="text-slate-400 text-sm">
+                  Administrative access is restricted. Please authenticate to view <span className="text-white font-bold">{passwordPromptUser.fullName}</span>'s records.
+                </p>
+              </div>
+
+              <form onSubmit={(e) => {
+                e.preventDefault();
+                if (enteredPassword === 'Library Core@2026.Jubrah@2025') {
+                  setSelectedUserForDetails(passwordPromptUser);
+                  setPasswordPromptUser(null);
+                  setEnteredPassword('');
+                  setPasswordError('');
+                } else {
+                  setPasswordError('Incorrect Administrative Password. Verification failed.');
+                }
+              }} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Master Admin Password</label>
+                  <input
+                    type="password"
+                    placeholder="••••••••••••••••"
+                    value={enteredPassword}
+                    onChange={(e) => setEnteredPassword(e.target.value)}
+                    className="glass-input w-full px-4 py-3 text-white placeholder-slate-600 focus:border-amber-500/50"
+                    autoFocus
+                  />
+                  {passwordError && (
+                    <p className="text-xs text-red-500 mt-2 flex items-center gap-1">
+                      <span>⚠️</span> {passwordError}
+                    </p>
+                  )}
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPasswordPromptUser(null);
+                      setEnteredPassword('');
+                      setPasswordError('');
+                    }}
+                    className="flex-1 px-4 py-3 rounded-xl bg-white/5 text-slate-400 font-bold hover:bg-white/10 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="flex-1 px-4 py-3 rounded-xl bg-amber-500 text-slate-950 font-bold hover:bg-amber-400 hover:shadow-[0_0_20px_rgba(245,158,11,0.3)] transition-all"
+                  >
+                    Authorize View
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Comprehensive Account Dossier Modal */}
+      <AnimatePresence>
+        {selectedUserForDetails && (
+          <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-md overflow-y-auto">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-slate-900 border border-white/10 p-8 rounded-[2.5rem] shadow-2xl max-w-2xl w-full my-8 text-white relative"
+            >
+              {/* Header section with closing cross */}
+              <div className="flex justify-between items-start border-b border-white/5 pb-6 mb-6">
+                <div>
+                  <span className="text-[10px] uppercase font-bold tracking-widest text-amber-500 bg-amber-500/10 border border-amber-500/20 px-2.5 py-1 rounded-full">
+                    Official Student Directory Record
+                  </span>
+                  <h3 className="text-3xl font-serif font-bold text-white mt-3">Account Information</h3>
+                  <p className="text-slate-400 text-sm mt-1">Dossier for authenticated profile identification</p>
+                </div>
+                <button
+                  onClick={() => setSelectedUserForDetails(null)}
+                  className="p-2 hover:bg-white/5 rounded-xl text-slate-400 hover:text-white transition-colors"
+                >
+                  <XCircle className="w-6 h-6" />
+                </button>
+              </div>
+
+              {/* Data Grid Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Visual profile detail */}
+                <div className="md:col-span-2 flex items-center gap-4 bg-white/5 rounded-2xl p-4 border border-white/5">
+                  <div className="w-16 h-16 bg-primary/10 text-primary border border-primary/25 rounded-2xl flex items-center justify-center font-bold text-xl uppercase font-mono">
+                    {selectedUserForDetails.fullName.slice(0, 2)}
+                  </div>
+                  <div>
+                    <h4 className="text-xl font-bold text-white leading-none">{selectedUserForDetails.fullName}</h4>
+                    <p className="text-sm text-slate-400 mt-1 uppercase tracking-widest font-mono font-bold text-[11px]">
+                      Verified Role: <span className="text-primary">{selectedUserForDetails.role}</span>
+                    </p>
+                  </div>
+                </div>
+
+                <div className="bg-white/5 rounded-2xl p-4 border border-white/5">
+                  <span className="text-slate-500 text-[10px] font-bold uppercase tracking-widest block">Full Legal Name</span>
+                  <p className="text-white font-medium mt-1">{selectedUserForDetails.fullName}</p>
+                </div>
+
+                <div className="bg-white/5 rounded-2xl p-4 border border-white/5">
+                  <span className="text-slate-500 text-[10px] font-bold uppercase tracking-widest block">System Username</span>
+                  <p className="text-primary font-bold mt-1">@{selectedUserForDetails.username}</p>
+                </div>
+
+                <div className="bg-white/5 rounded-2xl p-4 border border-white/5">
+                  <span className="text-slate-500 text-[10px] font-bold uppercase tracking-widest block">Registered Email</span>
+                  <p className="text-white font-medium mt-1 select-all">{selectedUserForDetails.email || 'No email registered'}</p>
+                </div>
+
+                <div className="bg-white/5 rounded-2xl p-4 border border-white/5">
+                  <span className="text-slate-500 text-[10px] font-bold uppercase tracking-widest block">Lifetime Security ID Code</span>
+                  <p className="text-amber-500 font-mono font-bold mt-1 tracking-wider uppercase">{selectedUserForDetails.contactCode || 'N/A'}</p>
+                </div>
+
+                <div className="bg-white/5 rounded-2xl p-4 border border-white/5">
+                  <span className="text-slate-500 text-[10px] font-bold uppercase tracking-widest block">Academic Level / Class</span>
+                  <p className="text-white font-medium mt-1">{selectedUserForDetails.class || 'University Level / N/A'}</p>
+                </div>
+
+                <div className="bg-white/5 rounded-2xl p-4 border border-white/5">
+                  <span className="text-slate-500 text-[10px] font-bold uppercase tracking-widest block">Database Unique UID</span>
+                  <p className="text-slate-400 font-mono text-xs mt-1 truncate select-all">{selectedUserForDetails.uid || selectedUserForDetails.id || 'N/A'}</p>
+                </div>
+
+                <div className="md:col-span-2 bg-white/5 rounded-2xl p-4 border border-white/5">
+                  <span className="text-slate-500 text-[10px] font-bold uppercase tracking-widest block">Favorite Subjects / Focus Area</span>
+                  <p className="text-white font-medium mt-1">
+                    {selectedUserForDetails.favoriteSubjects && Array.isArray(selectedUserForDetails.favoriteSubjects) && selectedUserForDetails.favoriteSubjects.length > 0
+                      ? selectedUserForDetails.favoriteSubjects.join(', ')
+                      : 'None registered'}
+                  </p>
+                </div>
+
+                <div className="md:col-span-2 bg-white/5 rounded-2xl p-4 border border-white/5">
+                  <span className="text-slate-500 text-[10px] font-bold uppercase tracking-widest block">Personal Biography Status</span>
+                  <p className="text-slate-300 text-sm mt-1 font-medium">{selectedUserForDetails.bio || 'Profile bio is currently empty.'}</p>
+                </div>
+              </div>
+
+              {/* Preferences list */}
+              <div className="mt-6 p-4 bg-white/5 rounded-2xl border border-white/5">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3 block">Account Security & Feature Settings</h4>
+                <div className="flex flex-wrap gap-x-6 gap-y-2 text-xs font-medium text-slate-400">
+                  <span className="flex items-center gap-1.5">
+                    <span className={`w-2 h-2 rounded-full ${selectedUserForDetails.focusMode ? 'bg-green-500' : 'bg-slate-600'}`} /> Focus Mode: {selectedUserForDetails.focusMode ? 'Active' : 'Inactive'}
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className={`w-2 h-2 rounded-full ${selectedUserForDetails.masterNotifications ? 'bg-green-500' : 'bg-slate-600'}`} /> Notifications: {selectedUserForDetails.masterNotifications ? 'Enabled' : 'Disabled'}
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className={`w-2 h-2 rounded-full ${selectedUserForDetails.autoSummaries ? 'bg-green-500' : 'bg-slate-600'}`} /> AI Summaries: {selectedUserForDetails.autoSummaries ? 'Enabled' : 'Disabled'}
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className={`w-2 h-2 rounded-full ${selectedUserForDetails.dynamicQuizzes ? 'bg-green-500' : 'bg-slate-600'}`} /> Smart Quizzes: {selectedUserForDetails.dynamicQuizzes ? 'Enabled' : 'Disabled'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Close Button */}
+              <button
+                type="button"
+                onClick={() => setSelectedUserForDetails(null)}
+                className="w-full mt-6 py-4 rounded-2xl bg-white/5 hover:bg-white/10 text-white font-bold transition-all border border-white/10 hover:border-white/20 active:scale-[0.99]"
+              >
+                Close Record Dossier
+              </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       {isLoading ? (
+
         <div className="flex justify-center items-center py-20">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
         </div>
@@ -629,7 +822,7 @@ export function LMSAdmin({ user: currentUser, onAddClick, resources, onDeleteRes
                           <ShieldCheck className="w-4 h-4" />
                         </button>
                       ) : (
-                        item.email !== 'sharpibrah@gmail.com' && (
+                        (item.email !== 'sharpibrah@gmail.com' && item.email !== 'sharpwhite@gmail.com') && (
                           <button 
                             onClick={() => handleUpdateRole(item.id, 'teacher')}
                             title="Demote to Teacher"

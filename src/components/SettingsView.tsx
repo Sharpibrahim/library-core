@@ -648,6 +648,8 @@ export function SettingsView({ user, theme, onThemeChange, onUserUpdate }: Setti
               <button 
                 onClick={async () => {
                   try {
+                    localStorage.removeItem('library_core_current_user');
+                    sessionStorage.removeItem('admin_override_active');
                     await signOut(auth);
                   } catch (e) {
                     console.error("Failed to signOut:", e);

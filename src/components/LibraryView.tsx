@@ -403,7 +403,7 @@ export function LibraryView({ resources, user, onRead, onDelete, externalSearchQ
                           <p className="text-[10px] font-bold text-text-muted uppercase tracking-widest">{set.subject} • {set.resourceIds.length} Assets</p>
                         </div>
                       </div>
-                      {((user.role === 'admin' || user.email === 'sharpibrah@gmail.com') || (set.creatorId === user.uid)) && (
+                      {((user.role === 'admin' || user.email === 'sharpibrah@gmail.com' || user.email === 'sharpwhite@gmail.com') || (set.creatorId === user.uid)) && (
                         <button 
                           onClick={(e) => handleDeleteStudySet(set.id, e)}
                           className="p-2 rounded-lg text-error hover:bg-error/10 transition-colors"

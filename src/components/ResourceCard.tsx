@@ -33,7 +33,7 @@ export function ResourceCard({ resource, currentUser, onRead, onEdit, onDelete, 
   const [showConfirm, setShowConfirm] = useState(false);
   const isPDF = resource.type?.toLowerCase() === 'pdf' || resource.fileUrl?.toLowerCase().split('?')[0].endsWith('.pdf');
   const isVideo = resource.type?.toLowerCase() === 'video' || resource.fileUrl?.includes('youtube.com') || resource.fileUrl?.includes('youtu.be') || resource.fileUrl?.toLowerCase().split('?')[0].endsWith('.mp4');
-  const isAdmin = currentUser.role === 'admin' || currentUser.email === 'sharpibrah@gmail.com';
+  const isAdmin = currentUser.role === 'admin' || currentUser.email === 'sharpibrah@gmail.com' || currentUser.email === 'sharpwhite@gmail.com';
   const isTeacher = currentUser.role === 'teacher';
   const isOwner = resource.uploadedBy === currentUser.uid;
   const coverImage = (resource.coverUrl && !resource.coverUrl.includes('picsum.photos')) 

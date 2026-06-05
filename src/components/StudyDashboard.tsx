@@ -34,7 +34,7 @@ interface StudyDashboardProps {
 }
 
 export function StudyDashboard({ user, onOpenResource, resources, courses = [], onOpenCourse }: StudyDashboardProps) {
-  const isAdmin = user.role === 'admin' || user.email === 'sharpibrah@gmail.com';
+  const isAdmin = user.role === 'admin' || user.email === 'sharpibrah@gmail.com' || user.email === 'sharpwhite@gmail.com';
   const [readingHistory, setReadingHistory] = useState<ReadingProgress[]>([]);
   const [studySets, setStudySets] = useState<StudySet[]>([]);
   const [searchQuery, setSearchQuery] = useState('');

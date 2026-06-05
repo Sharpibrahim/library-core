@@ -704,7 +704,7 @@ export function AdvancedReader({ resource, user, onClose, onDelete }: AdvancedRe
             <PanelRight className="w-5 h-5" />
           </button>
 
-          {((user.role === 'admin' || user.email === 'sharpibrah@gmail.com' || resource.uploadedBy === user.uid) && onDelete) && (
+          {((user.role === 'admin' || user.email === 'sharpibrah@gmail.com' || user.email === 'sharpwhite@gmail.com' || resource.uploadedBy === user.uid) && onDelete) && (
             <button 
               onClick={() => {
                 if (confirm('Are you sure you want to delete this resource? This action cannot be undone.')) {
@@ -857,7 +857,7 @@ export function AdvancedReader({ resource, user, onClose, onDelete }: AdvancedRe
                             </div>
                          </a>
 
-                         {((user.role === 'admin' || user.email === 'sharpibrah@gmail.com' || resource.uploadedBy === user.uid) && onDelete) && (
+                         {((user.role === 'admin' || user.email === 'sharpibrah@gmail.com' || user.email === 'sharpwhite@gmail.com' || resource.uploadedBy === user.uid) && onDelete) && (
                            <button 
                              onClick={() => {
                                if (confirm('Are you sure you want to permanently delete this PDF? This action is instant and cannot be undone.')) {

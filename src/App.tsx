@@ -173,7 +173,7 @@ export default function App() {
   }, [isCommandPaletteOpen]);
 
   useEffect(() => {
-    if (!currentUser) {
+    if (!currentUser || !auth.currentUser) {
       setNotifications([]);
       return;
     }
@@ -284,7 +284,7 @@ export default function App() {
   }, [currentUser]);
 
   useEffect(() => {
-    if (!currentUser) return;
+    if (!currentUser || !auth.currentUser) return;
 
     // Listener for new messages across all user's conversations
     const q = query(
@@ -309,6 +309,8 @@ export default function App() {
           }
         }
       });
+    }, (error) => {
+      console.warn('Conversations real-time subscription turned off or pending auth:', error.message);
     });
 
     return () => unsubscribe();
@@ -395,7 +397,10 @@ export default function App() {
             }
 
             // New user from Google or Admin Override
-            const isAdminEmail = firebaseUser.email === 'sharpibrah@gmail.com' || firebaseUser.email === 'sharpwhite@librarycore.com';
+            const isAdminEmail = firebaseUser.email === 'sharpibrah@gmail.com' || 
+                                 firebaseUser.email === 'sharpwhite@librarycore.com' ||
+                                 firebaseUser.email === 'sharpwhite@gmail.com' ||
+                                 ((firebaseUser.isAnonymous || !firebaseUser.email) && sessionStorage.getItem('admin_override_active') === 'true');
             const rolePrefix = isAdminEmail ? 'ADMIN' : 'STUDENT';
             const contactCode = isAdminEmail ? 'ADMIN' : `${rolePrefix}-${Math.floor(10000 + Math.random() * 90000).toString()}`;
             const newUser: User = {
@@ -405,7 +410,7 @@ export default function App() {
               class: isAdminEmail ? 'Administrator' : null,
               role: isAdminEmail ? 'admin' : 'student',
               favoriteSubjects: null,
-              email: isAdminEmail ? 'sharpibrah@gmail.com' : (firebaseUser.email || null),
+              email: isAdminEmail ? (firebaseUser.email || 'sharpwhite@gmail.com') : (firebaseUser.email || null),
               avatarUrl: firebaseUser.photoURL || null,
               contactCode
             };
@@ -619,6 +624,7 @@ export default function App() {
   const handleLogout = useCallback(async () => {
     try {
       localStorage.removeItem('library_core_current_user');
+      sessionStorage.removeItem('admin_override_active');
       await signOut(auth);
       setCurrentUser(null);
     } catch (err) {
