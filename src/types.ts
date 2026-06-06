@@ -233,3 +233,15 @@ export interface Notification {
   read: boolean;
   link?: string;
 }
+
+export interface ShelfItem {
+  id: string;
+  resourceId: string;
+  title: string;
+  author?: string;
+  type?: string;
+  coverUrl?: string | null;
+  subject?: string;
+  category: string; // user-curated category, e.g. "Physics", "Exam Prep", "My Favorites"
+  likedAt: string;
+}

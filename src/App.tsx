@@ -29,11 +29,13 @@ import { TopBar } from './components/TopBar';
 import { UploadSection } from './components/UploadSection';
 import { StudyDashboard } from './components/StudyDashboard';
 import { LibraryView } from './components/LibraryView';
+import { ShelfView } from './components/ShelfView';
 import { AIAssistantView } from './components/AIAssistantView';
 import { NotificationsView } from './components/NotificationsView';
 import { SettingsView } from './components/SettingsView';
 import { HistoryView } from './components/HistoryView';
 import { LMSAdmin } from './components/LMSAdmin';
+import { FeedbackView } from './components/FeedbackView';
 import { CoursesView } from './components/CoursesView';
 import { CoursePlayer } from './components/CoursePlayer';
 import { ClassroomList } from './components/ClassroomList';
@@ -718,6 +720,7 @@ export default function App() {
                 user={currentUser} 
                 resources={resources} 
                 onOpenResource={setReadingResource} 
+                onNavigate={setActiveTab}
                 onOpenCourse={async (course) => {
                   // Fetch full course data
                   try {
@@ -775,7 +778,7 @@ export default function App() {
             </div>
 
             <div style={{ display: activeTab === 'admin-panel' ? 'block' : 'none' }}>
-              {currentUser && (
+              {currentUser && (currentUser.role === 'admin' || currentUser.role === 'teacher') && (
                 <LMSAdmin 
                   user={currentUser}
                   onAddClick={() => setActiveTab('upload')} 
@@ -801,6 +804,10 @@ export default function App() {
               <ExpertChatView user={currentUser} />
             </div>
 
+            <div style={{ display: activeTab === 'feedback' ? 'block' : 'none' }}>
+              {currentUser && <FeedbackView user={currentUser} />}
+            </div>
+
             <div style={{ display: activeTab === 'settings' ? 'block' : 'none' }}>
               <SettingsView 
                 user={currentUser} 
@@ -814,8 +821,17 @@ export default function App() {
               <UserManualView />
             </div>
 
+            <div style={{ display: activeTab === 'shelf' ? 'block' : 'none' }}>
+              <ShelfView 
+                user={currentUser} 
+                resources={resources} 
+                onOpenResource={setReadingResource}
+                createNotification={createNotification}
+              />
+            </div>
+
             {/* Placeholder for other tabs */}
-            <div style={{ display: ['shelf', 'notes', 'papers', 'progress', 'profile', 'assignments', 'analytics', 'search'].includes(activeTab) ? 'block' : 'none' }}>
+            <div style={{ display: ['notes', 'papers', 'progress', 'profile', 'assignments', 'analytics', 'search'].includes(activeTab) ? 'block' : 'none' }}>
               <div className="flex flex-col items-center justify-center py-32 text-center">
                 <div className="w-24 h-24 bg-black/5 dark:bg-white/5 rounded-[2.5rem] flex items-center justify-center text-slate-500 mb-6 border border-slate-200 dark:border-white/10">
                   <Library className="w-12 h-12" />

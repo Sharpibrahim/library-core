@@ -197,12 +197,51 @@
         "author": { "type": "string" }
       },
       "required": ["resourceId", "lastPage", "totalPages", "updatedAt"]
+    },
+    "ShelfItem": {
+      "title": "ShelfItem",
+      "description": "User's collection of saved/liked documents or videos on their personal shelf.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "resourceId": { "type": "string" },
+        "title": { "type": "string" },
+        "author": { "type": "string" },
+        "type": { "type": "string" },
+        "coverUrl": { "type": "string" },
+        "subject": { "type": "string" },
+        "category": { "type": "string" },
+        "likedAt": { "type": "string" }
+      },
+      "required": ["resourceId", "title", "likedAt"]
+    },
+    "Feedback": {
+      "title": "Feedback",
+      "description": "User submitted support request or feedback.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "userRole": { "type": "string" },
+        "category": { "type": "string" },
+        "subject": { "type": "string" },
+        "content": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "status": { "type": "string" },
+        "targetEmail": { "type": "string" }
+      },
+      "required": ["userId", "userName", "category", "subject", "content", "status"]
     }
   },
   "firestore": {
     "users/{userId}": {
       "schema": "User",
       "description": "User profile data."
+    },
+    "users/{userId}/shelf/{shelfId}": {
+      "schema": "ShelfItem",
+      "description": "User's personal shelf of saved documents or videos."
     },
     "resources/{resourceId}": {
       "schema": "Resource",
@@ -247,6 +286,10 @@
     "conversations/{conversationId}/messages/{messageId}": {
       "schema": "Message",
       "description": "Messages within a conversation."
+    },
+    "feedbacks/{feedbackId}": {
+      "schema": "Feedback",
+      "description": "Support and feedback submissions."
     }
   }
 }

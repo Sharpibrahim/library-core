@@ -19,7 +19,8 @@ import {
   ShieldCheck,
   MessageSquare,
   HelpCircle,
-  Clock
+  Clock,
+  Heart
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { User as UserType } from '../types';
@@ -39,12 +40,14 @@ interface SidebarProps {
 const MENU_ITEMS = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'library', label: 'Library', icon: Library },
+  { id: 'shelf', label: 'My Saved Shelf', icon: Heart },
   { id: 'courses', label: 'Elite Courses', icon: BookOpen },
   { id: 'quizzes', label: 'Quiz Master', icon: Trophy, sparkles: true },
   { id: 'classrooms', label: 'Classrooms', icon: Users },
   { id: 'notifications', label: 'Notifications', icon: Bell },
   { id: 'messages', label: 'Expert Chat', icon: MessageSquare, badge: true },
   { id: 'ai-assistant', label: 'AI Assistant', icon: Bot },
+  { id: 'feedback', label: 'Support & Feedback', icon: HelpCircle },
   { id: 'settings', label: 'System Settings', icon: Settings },
   { id: 'upload', label: 'Upload Content', icon: Upload },
 ];

@@ -17,12 +17,14 @@ import {
   Search,
   GraduationCap,
   Shield,
-  X
+  X,
+  Heart
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { User, Resource, ReadingProgress, StudySet, Course } from '../types';
 import { getSubjectCover } from '../constants/subjectImages';
-import { db } from '../firebase';
+import { db, auth, handleFirestoreError, OperationType } from '../firebase';
+import { onAuthStateChanged } from 'firebase/auth';
 import { onSnapshot, collection, query, orderBy, doc, deleteDoc } from 'firebase/firestore';
 
 interface StudyDashboardProps {
@@ -31,12 +33,14 @@ interface StudyDashboardProps {
   resources: Resource[];
   courses?: Course[];
   onOpenCourse?: (course: Course) => void;
+  onNavigate?: (tab: string) => void;
 }
 
-export function StudyDashboard({ user, onOpenResource, resources, courses = [], onOpenCourse }: StudyDashboardProps) {
+export function StudyDashboard({ user, onOpenResource, resources, courses = [], onOpenCourse, onNavigate }: StudyDashboardProps) {
   const isAdmin = user.role === 'admin' || user.email === 'sharpibrah@gmail.com' || user.email === 'sharpwhite@gmail.com';
   const [readingHistory, setReadingHistory] = useState<ReadingProgress[]>([]);
   const [studySets, setStudySets] = useState<StudySet[]>([]);
+  const [shelfItems, setShelfItems] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [enrolledCourses, setEnrolledCourses] = useState<any[]>([]);
   const [totalMembers, setTotalMembers] = useState(0);
@@ -44,6 +48,14 @@ export function StudyDashboard({ user, onOpenResource, resources, courses = [], 
   const [totalTeachers, setTotalTeachers] = useState(0);
   const [downloadCount, setDownloadCount] = useState(0);
   const [classroomsCount, setClassroomsCount] = useState(0);
+  const [firebaseUser, setFirebaseUser] = useState(auth.currentUser);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (u) => {
+      setFirebaseUser(u);
+    });
+    return () => unsubscribe();
+  }, []);
 
   useEffect(() => {
     // Load local history initially for instant render
@@ -54,8 +66,25 @@ export function StudyDashboard({ user, onOpenResource, resources, courses = [], 
 
     // Real-time synchronization of reading progress from Firestore
     let unsubscribeProgress = () => {};
-    if (user?.uid) {
+    let unsubscribeShelf = () => {};
+    let unsubscribeUsers = () => {};
+    let unsubscribeSets = () => {};
+
+    if (firebaseUser && firebaseUser.uid === user.uid) {
       try {
+        const shelfRef = collection(db, 'users', user.uid, 'shelf');
+        const qShelf = query(shelfRef, orderBy('likedAt', 'desc'));
+        unsubscribeShelf = onSnapshot(qShelf, (snapshot) => {
+          const items: any[] = [];
+          snapshot.forEach(docSnap => {
+            items.push({ id: docSnap.id, ...docSnap.data() });
+          });
+          setShelfItems(items);
+        }, (err) => {
+          console.warn('Dashboard shelf sync error:', err);
+          handleFirestoreError(err, OperationType.LIST, shelfRef.path);
+        });
+
         const progressRef = collection(db, 'users', user.uid, 'progress');
         const qProgress = query(progressRef, orderBy('updatedAt', 'desc'));
         
@@ -96,35 +125,41 @@ export function StudyDashboard({ user, onOpenResource, resources, courses = [], 
           }
         }, (error) => {
           console.warn('Syncing progress from firestore failed:', error);
+          handleFirestoreError(error, OperationType.LIST, progressRef.path);
         });
       } catch (e) {
         console.warn('Failed to listen to reading progress:', e);
       }
-    }
 
-    // Real-time synchronization of users for admin stats
-    let unsubscribeUsers = () => {};
-    if (isAdmin) {
-      try {
-        unsubscribeUsers = onSnapshot(collection(db, 'users'), (snapshot) => {
-          const allUsers = snapshot.docs.map(doc => doc.data());
-          setTotalMembers(allUsers.length || 0);
-          setTotalStudents(allUsers.filter(u => u.role === 'student').length || 0);
-          setTotalTeachers(allUsers.filter(u => u.role === 'teacher').length || 0);
-        }, (error) => {
-          console.warn('Syncing users in StudyDashboard failed:', error);
-        });
-      } catch (e) {
-        console.warn('Failed to listen to users collection:', e);
+      // Real-time synchronization of users for admin stats
+      if (isAdmin) {
+        try {
+          const usersCol = collection(db, 'users');
+          unsubscribeUsers = onSnapshot(usersCol, (snapshot) => {
+            const allUsers = snapshot.docs.map(doc => doc.data());
+            setTotalMembers(allUsers.length || 0);
+            setTotalStudents(allUsers.filter(u => u.role === 'student').length || 0);
+            setTotalTeachers(allUsers.filter(u => u.role === 'teacher').length || 0);
+          }, (error) => {
+            console.warn('Syncing users in StudyDashboard failed:', error);
+            handleFirestoreError(error, OperationType.LIST, usersCol.path);
+          });
+        } catch (e) {
+          console.warn('Failed to listen to users collection:', e);
+        }
       }
-    }
 
-    // Real-time Study Sets
-    const qSets = query(collection(db, 'study_sets'), orderBy('createdAt', 'desc'));
-    const unsubscribeSets = onSnapshot(qSets, (snapshot) => {
-      const sets = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as StudySet));
-      setStudySets(sets);
-    });
+      // Real-time Study Sets
+      const studySetsCol = collection(db, 'study_sets');
+      const qSets = query(studySetsCol, orderBy('createdAt', 'desc'));
+      unsubscribeSets = onSnapshot(qSets, (snapshot) => {
+        const sets = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as StudySet));
+        setStudySets(sets);
+      }, (error) => {
+        console.warn('Syncing study sets failed:', error);
+        handleFirestoreError(error, OperationType.LIST, studySetsCol.path);
+      });
+    }
 
     const fetchEnrolled = async () => {
       try {
@@ -193,8 +228,9 @@ export function StudyDashboard({ user, onOpenResource, resources, courses = [], 
       unsubscribeSets();
       unsubscribeProgress();
       unsubscribeUsers();
+      unsubscribeShelf();
     };
-  }, [user.uid, resources.length, user.role]);
+  }, [user.uid, resources.length, user.role, firebaseUser]);
 
   // Derived metrics & stats setup
   const favSubjects = user.favoriteSubjects || [];
@@ -211,7 +247,7 @@ export function StudyDashboard({ user, onOpenResource, resources, courses = [], 
         icon: Library, 
         color: 'text-primary', 
         bg: 'bg-primary/10',
-        onClick: () => window.dispatchEvent(new CustomEvent('changeTab', { detail: 'library' }))
+        onClick: () => onNavigate?.('library')
       },
       { 
         label: '👥 Total Members', 
@@ -245,12 +281,12 @@ export function StudyDashboard({ user, onOpenResource, resources, courses = [], 
         bg: 'bg-emerald-500/10' 
       },
       { 
-        label: '⭐ Favorite Books', 
-        value: favoriteBooksCount, 
-        icon: Star, 
-        color: 'text-amber-500', 
-        bg: 'bg-amber-500/10',
-        onClick: () => window.dispatchEvent(new CustomEvent('changeTab', { detail: 'library' }))
+        label: '❤️ My Shelf', 
+        value: shelfItems.length, 
+        icon: Heart, 
+        color: 'text-rose-500', 
+        bg: 'bg-rose-500/10',
+        onClick: () => onNavigate?.('shelf')
       },
       { 
         label: 'Books Read', 
@@ -258,7 +294,7 @@ export function StudyDashboard({ user, onOpenResource, resources, courses = [], 
         icon: BookOpen, 
         color: 'text-primary', 
         bg: 'bg-primary/10',
-        onClick: () => window.dispatchEvent(new CustomEvent('changeTab', { detail: 'library' }))
+        onClick: () => onNavigate?.('library')
       },
       { 
         label: 'Courses Enrolled', 
@@ -266,7 +302,7 @@ export function StudyDashboard({ user, onOpenResource, resources, courses = [], 
         icon: GraduationCap, 
         color: 'text-rose-500', 
         bg: 'bg-rose-500/10',
-        onClick: () => window.dispatchEvent(new CustomEvent('changeTab', { detail: 'courses' }))
+        onClick: () => onNavigate?.('courses')
       },
       { 
         label: '🏫 Classes', 
@@ -274,7 +310,7 @@ export function StudyDashboard({ user, onOpenResource, resources, courses = [], 
         icon: Layers, 
         color: 'text-blue-500', 
         bg: 'bg-blue-500/10',
-        onClick: () => window.dispatchEvent(new CustomEvent('changeTab', { detail: 'classes' }))
+        onClick: () => onNavigate?.('classrooms')
       }
     ];
   } else {
@@ -287,12 +323,12 @@ export function StudyDashboard({ user, onOpenResource, resources, courses = [], 
         bg: 'bg-emerald-500/10' 
       },
       { 
-        label: '⭐ Favorite Books', 
-        value: favoriteBooksCount, 
-        icon: Star, 
-        color: 'text-amber-500', 
-        bg: 'bg-amber-500/10',
-        onClick: () => window.dispatchEvent(new CustomEvent('changeTab', { detail: 'library' }))
+        label: '❤️ My Shelf', 
+        value: shelfItems.length, 
+        icon: Heart, 
+        color: 'text-rose-500', 
+        bg: 'bg-rose-500/10',
+        onClick: () => onNavigate?.('shelf')
       },
       { 
         label: 'Books Read', 
@@ -300,7 +336,7 @@ export function StudyDashboard({ user, onOpenResource, resources, courses = [], 
         icon: BookOpen, 
         color: 'text-primary', 
         bg: 'bg-primary/10',
-        onClick: () => window.dispatchEvent(new CustomEvent('changeTab', { detail: 'library' }))
+        onClick: () => onNavigate?.('library')
       },
       { 
         label: 'Courses Enrolled', 
@@ -308,7 +344,7 @@ export function StudyDashboard({ user, onOpenResource, resources, courses = [], 
         icon: GraduationCap, 
         color: 'text-rose-500', 
         bg: 'bg-rose-500/10',
-        onClick: () => window.dispatchEvent(new CustomEvent('changeTab', { detail: 'courses' }))
+        onClick: () => onNavigate?.('courses')
       }
     ];
   }
@@ -522,37 +558,108 @@ export function StudyDashboard({ user, onOpenResource, resources, courses = [], 
           </div>
         </div>
 
-        {/* Study Sets */}
-        <div className="space-y-6">
-          <div className="flex items-center gap-3">
-             <div className="p-2 rounded-xl bg-accent/10 text-accent">
-                <Layers className="w-5 h-5" />
-             </div>
-             <h2 className="text-2xl font-display font-black text-text-main tracking-tight">Study Sets</h2>
+        {/* Study Sets & Shelf Quick Panel */}
+        <div className="space-y-10">
+          <div className="space-y-6">
+            <div className="flex items-center gap-3">
+               <div className="p-2 rounded-xl bg-accent/10 text-accent">
+                  <Layers className="w-5 h-5" />
+               </div>
+               <h2 className="text-2xl font-display font-black text-text-main tracking-tight">Study Sets</h2>
+            </div>
+            
+            <div className="space-y-4">
+              {studySets.length === 0 ? (
+                <p className="text-xs text-text-secondary italic bg-white p-4 rounded-xl border border-border">No active study sets configured.</p>
+              ) : (
+                studySets.slice(0, 2).map((set, i) => (
+                  <motion.div 
+                    key={i}
+                    whileHover={{ scale: 1.02 }}
+                    className="bg-white p-6 rounded-[2rem] border border-border shadow-soft group cursor-pointer hover:bg-section transition-all"
+                  >
+                    <div className="flex justify-between items-start mb-4">
+                       <div className="px-3 py-1 rounded-full bg-primary/5 border border-primary/10 text-[8px] font-black text-primary uppercase tracking-widest">
+                          {set.subject}
+                       </div>
+                       <div className="flex items-center gap-1 text-[8px] font-black text-text-muted uppercase tracking-tighter bg-section px-2 py-1 rounded-lg">
+                          <Library className="w-3 h-3" /> {set.resourceIds.length} Resources
+                       </div>
+                    </div>
+                    <h3 className="font-bold text-sm text-text-main mb-2">{set.title}</h3>
+                    <p className="text-xs text-text-secondary leading-relaxed line-clamp-2 mb-4">{set.description}</p>
+                    <button className="w-full py-3 bg-white border border-border rounded-xl text-[10px] font-black text-text-main uppercase tracking-widest group-hover:border-primary group-hover:text-primary transition-all flex items-center justify-center gap-2">
+                       Open Set <ChevronRight className="w-3 h-3" />
+                    </button>
+                  </motion.div>
+                ))
+              )}
+            </div>
           </div>
-          
-          <div className="space-y-4">
-            {studySets.map((set, i) => (
-              <motion.div 
-                key={i}
-                whileHover={{ scale: 1.02 }}
-                className="bg-white p-6 rounded-[2rem] border border-border shadow-soft group cursor-pointer hover:bg-section transition-all"
-              >
-                <div className="flex justify-between items-start mb-4">
-                   <div className="px-3 py-1 rounded-full bg-primary/5 border border-primary/10 text-[8px] font-black text-primary uppercase tracking-widest">
-                      {set.subject}
-                   </div>
-                   <div className="flex items-center gap-1 text-[8px] font-black text-text-muted uppercase tracking-tighter bg-section px-2 py-1 rounded-lg">
-                      <Library className="w-3 h-3" /> {set.resourceIds.length} Resources
-                   </div>
-                </div>
-                <h3 className="font-bold text-sm text-text-main mb-2">{set.title}</h3>
-                <p className="text-xs text-text-secondary leading-relaxed line-clamp-2 mb-4">{set.description}</p>
-                <button className="w-full py-3 bg-white border border-border rounded-xl text-[10px] font-black text-text-main uppercase tracking-widest group-hover:border-primary group-hover:text-primary transition-all flex items-center justify-center gap-2">
-                   Open Set <ChevronRight className="w-3 h-3" />
+
+          <div className="space-y-6 pt-4 border-t border-border">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                 <div className="p-2 rounded-xl bg-rose-500/10 text-rose-500">
+                    <Heart className="w-5 h-5 fill-current" />
+                 </div>
+                 <h2 className="text-2xl font-display font-black text-text-main tracking-tight">Saved Shelf</h2>
+              </div>
+              {shelfItems.length > 0 && (
+                <button 
+                  onClick={() => onNavigate?.('shelf')}
+                  className="text-xs font-bold text-primary hover:underline flex items-center gap-0.5"
+                >
+                  Go to Shelf <ChevronRight className="w-4 h-4" />
                 </button>
-              </motion.div>
-            ))}
+              )}
+            </div>
+            
+            <div className="space-y-4">
+              {shelfItems.length === 0 ? (
+                <div className="bg-white border rounded-[2rem] p-6 text-center border-dashed border-gray-200">
+                  <p className="text-xs text-slate-500 font-semibold">No saved liked documents on your personal shelf.</p>
+                  <button
+                    onClick={() => onNavigate?.('library')}
+                    className="mt-3 text-xs font-black text-primary hover:underline uppercase tracking-wide opacity-85 hover:opacity-100"
+                  >
+                    Browse Library →
+                  </button>
+                </div>
+              ) : (
+                shelfItems.slice(0, 3).map((item, i) => (
+                  <motion.div 
+                    key={i}
+                    whileHover={{ scale: 1.02 }}
+                    className="bg-white p-4 rounded-2xl border border-border shadow-soft flex items-center gap-3 hover:border-rose-500 transition-all cursor-pointer"
+                    onClick={() => onNavigate?.('shelf')}
+                  >
+                    <div className="w-10 h-14 rounded-xl bg-slate-100 overflow-hidden shrink-0 border border-slate-150">
+                      <img 
+                        src={item.coverUrl || 'https://images.unsplash.com/photo-1543002588-bfa74002ed7e?w=400'} 
+                        className="w-full h-full object-cover" 
+                        alt="" 
+                        referrerPolicy="no-referrer"
+                      />
+                    </div>
+                    <div className="flex-grow min-w-0">
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <span className="px-2 py-0.5 rounded-full bg-rose-50 text-[7px] font-black tracking-widest text-rose-600 uppercase">
+                          {item.category || 'Favorites'}
+                        </span>
+                        {item.subject && (
+                          <span className="px-2 py-0.5 rounded-full bg-slate-100 text-[7px] font-bold text-slate-500 uppercase">
+                            {item.subject}
+                          </span>
+                        )}
+                      </div>
+                      <h4 className="font-bold text-xs text-text-main truncate">{item.title}</h4>
+                      <p className="text-[10px] text-text-muted truncate mt-0.5">{item.author || 'Unknown'}</p>
+                    </div>
+                  </motion.div>
+                ))
+              )}
+            </div>
           </div>
         </div>
       </div>

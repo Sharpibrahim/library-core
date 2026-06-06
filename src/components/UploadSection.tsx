@@ -115,42 +115,21 @@ export function UploadSection({ user, onUploadComplete }: UploadSectionProps) {
         fileSize = file.size;
 
         if (isOnline) {
-          console.log('[UPLOAD] Uploading file to server backend /api/upload...');
           setProgress(20);
+          console.log('[UPLOAD] Uploading directly to Express container backend and permanent Cloud Storage...');
           
           const uploadFormData = new FormData();
           uploadFormData.append('file', file);
-          
-          const uploadRes = await fetch('/api/upload', {
-            method: 'POST',
-            body: uploadFormData
-          });
-          
-          if (!uploadRes.ok) {
-            const uploadErrText = await uploadRes.text();
-            throw new Error(`Server upload failed: ${uploadErrText}`);
-          }
-          
-          setProgress(60);
-          const uploadData = await uploadRes.json();
-          const serverFileUrl = uploadData.url; // e.g., /uploads/123456-file.pdf
-          console.log(`[UPLOAD] Server uploaded successfully: ${serverFileUrl}`);
+          uploadFormData.append('title', formData.title);
+          uploadFormData.append('author', formData.author);
+          uploadFormData.append('type', type);
+          uploadFormData.append('description', formData.description || '');
+          uploadFormData.append('cover_url', coverUrl);
+          uploadFormData.append('genre', formData.category);
 
-          // Register in backend SQLite database
           const response = await fetch('/api/resources', {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              title: formData.title,
-              author: formData.author,
-              type: type,
-              description: formData.description || '',
-              cover_url: coverUrl,
-              genre: formData.category,
-              body_file_url: serverFileUrl
-            })
+            body: uploadFormData
           });
 
           if (!response.ok) {
@@ -158,11 +137,12 @@ export function UploadSection({ user, onUploadComplete }: UploadSectionProps) {
             throw new Error(`Server registration failed: ${errText}`);
           }
 
-          setProgress(80);
+          setProgress(75);
           const result = await response.json();
-          fileUrl = result.file_url || serverFileUrl;
+          fileUrl = result.file_url || null;
           console.log(`[UPLOAD] Server-side registration successful. URL: ${fileUrl}`);
 
+          setProgress(90);
           // Sync into Firestore for immediate client-side and collaborative stream updates
           await addDoc(collection(db, 'resources'), {
             title: formData.title,

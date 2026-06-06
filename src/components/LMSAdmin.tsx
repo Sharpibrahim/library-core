@@ -26,11 +26,13 @@ import {
   Zap,
   Activity,
   ShieldX,
-  UserMinus
+  UserMinus,
+  Mail,
+  MessageSquare
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Course, Quiz, User } from '../types';
-import { db } from '../firebase';
+import { db, handleFirestoreError, OperationType } from '../firebase';
 import { collection, onSnapshot, query, deleteDoc, doc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { CourseBuilder } from './CourseBuilder';
 
@@ -43,8 +45,9 @@ interface LMSAdminProps {
 
 export function LMSAdmin({ user: currentUser, onAddClick, resources, onDeleteResource }: LMSAdminProps) {
   const isSuperAdmin = currentUser.email === 'sharpibrah@gmail.com' || currentUser.email === 'sharpwhite@gmail.com';
-  const [activeSubTab, setActiveSubTab] = useState<'courses' | 'quizzes' | 'teachers' | 'students' | 'users' | 'library' | 'usage'>('courses');
+  const [activeSubTab, setActiveSubTab] = useState<'courses' | 'quizzes' | 'teachers' | 'students' | 'users' | 'library' | 'usage' | 'feedback'>('courses');
   const [courses, setCourses] = useState<Course[]>([]);
+  const [feedbacks, setFeedbacks] = useState<any[]>([]);
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -103,17 +106,29 @@ export function LMSAdmin({ user: currentUser, onAddClick, resources, onDeleteRes
     // Quizzes listener
     const unsubQuizzes = onSnapshot(collection(db, 'quizzes'), (snapshot) => {
       setQuizzes(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })) as Quiz[]);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'quizzes');
     });
 
     // Users listener
     const unsubUsers = onSnapshot(collection(db, 'users'), (snapshot) => {
       setUsers(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id, uid: doc.id })) as User[]);
       setIsLoading(false);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'users');
+    });
+
+    // Feedbacks listener
+    const unsubFeedbacks = onSnapshot(collection(db, 'feedbacks'), (snapshot) => {
+      setFeedbacks(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })) as any[]);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'feedbacks');
     });
 
     return () => {
       unsubQuizzes();
       unsubUsers();
+      unsubFeedbacks();
     };
   }, []);
 
@@ -260,6 +275,14 @@ export function LMSAdmin({ user: currentUser, onAddClick, resources, onDeleteRes
         );
       case 'library':
         return resources.filter(r => r.title?.toLowerCase().includes(query) || r.author?.toLowerCase().includes(query));
+      case 'feedback':
+        return feedbacks.filter(fb => 
+          fb.userName?.toLowerCase().includes(query) || 
+          fb.userEmail?.toLowerCase().includes(query) || 
+          fb.subject?.toLowerCase().includes(query) ||
+          fb.content?.toLowerCase().includes(query) ||
+          fb.category?.toLowerCase().includes(query)
+        );
       case 'usage':
         return [];
       default:
@@ -272,6 +295,7 @@ export function LMSAdmin({ user: currentUser, onAddClick, resources, onDeleteRes
     if (activeSubTab === 'quizzes') return <ClipboardList className="w-6 h-6" />;
     if (activeSubTab === 'library') return <Archive className="w-6 h-6" />;
     if (activeSubTab === 'usage') return <Archive className="w-6 h-6" />;
+    if (activeSubTab === 'feedback') return <Mail className="w-6 h-6 text-primary" />;
     
     const r = role || (activeSubTab === 'teachers' ? 'teacher' : activeSubTab === 'students' ? 'student' : '');
     switch (r) {
@@ -299,6 +323,7 @@ export function LMSAdmin({ user: currentUser, onAddClick, resources, onDeleteRes
           { id: 'users', label: 'All Users', icon: ShieldCheck, adminOnly: true },
           { id: 'library', label: 'Library', icon: Archive, adminOnly: false },
           { id: 'usage', label: 'Usage Monitor', icon: Activity, adminOnly: true },
+          { id: 'feedback', label: 'User Feedback', icon: Mail, adminOnly: true },
         ].filter(tab => !tab.adminOnly || currentUser.role === 'admin').map((tab) => {
           const Icon = tab.icon;
           const isActive = activeSubTab === tab.id;
@@ -332,22 +357,24 @@ export function LMSAdmin({ user: currentUser, onAddClick, resources, onDeleteRes
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
-          <button 
-            onClick={() => {
-              if (activeSubTab === 'users' || activeSubTab === 'teachers' || activeSubTab === 'students') {
-                setShowCreateUser(true);
-              } else if (activeSubTab === 'courses') {
-                setSelectedCourse(null);
-                setIsEditingCourse(true);
-              } else {
-                onAddClick();
-              }
-            }}
-            className="bg-primary hover:brightness-110 text-white px-8 py-4 rounded-2xl font-bold flex items-center justify-center gap-2 transition-all shadow-xl shadow-primary/20"
-          >
-            <Plus className="w-5 h-5" />
-            Add New {activeSubTab.slice(0, -1)}
-          </button>
+          {activeSubTab !== 'feedback' && (
+            <button 
+              onClick={() => {
+                if (activeSubTab === 'users' || activeSubTab === 'teachers' || activeSubTab === 'students') {
+                  setShowCreateUser(true);
+                } else if (activeSubTab === 'courses') {
+                  setSelectedCourse(null);
+                  setIsEditingCourse(true);
+                } else {
+                  onAddClick();
+                }
+              }}
+              className="bg-primary hover:brightness-110 text-white px-8 py-4 rounded-2xl font-bold flex items-center justify-center gap-2 transition-all shadow-xl shadow-primary/20 shrink-0"
+            >
+              <Plus className="w-5 h-5" />
+              Add New {activeSubTab.slice(0, -1)}
+            </button>
+          )}
         </div>
       )}
 
@@ -794,6 +821,102 @@ export function LMSAdmin({ user: currentUser, onAddClick, resources, onDeleteRes
 
         <div className="flex justify-center items-center py-20">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+        </div>
+      ) : activeSubTab === 'feedback' ? (
+        <div className="space-y-6">
+          {filteredData().length === 0 ? (
+            <div className="text-center py-16 bg-white/5 border border-white/10 rounded-[2rem] p-8 text-slate-400">
+              <Mail className="w-12 h-12 mx-auto text-slate-600 mb-3" />
+              <p className="font-bold text-lg text-white">No feedback items found</p>
+              <p className="text-slate-500 text-sm mt-1">Feedback reports from students and faculty will appear here once submitted.</p>
+            </div>
+          ) : (
+            filteredData().map((fb: any, index) => (
+              <motion.div
+                key={fb.id}
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.04 }}
+                className="bg-white/5 p-6 rounded-[2rem] border border-white/10 shadow-sm relative group overflow-hidden"
+              >
+                <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full blur-3xl pointer-events-none" />
+                <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 relative z-10">
+                  <div className="space-y-3 flex-grow">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="bg-primary/20 text-indigo-300 font-bold text-[10px] uppercase tracking-wider px-3 py-1 rounded-full">
+                        {fb.category || 'General Feedback'}
+                      </span>
+                      <span className={`text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-full ${
+                        fb.status === 'resolved' 
+                          ? 'bg-emerald-500/20 text-emerald-300' 
+                          : 'bg-amber-500/20 text-amber-300'
+                      }`}>
+                        {fb.status || 'new'}
+                      </span>
+                      <span className="text-xs text-slate-400 font-mono">
+                        {fb.createdAt ? new Date(fb.createdAt).toLocaleString() : 'Recent'}
+                      </span>
+                    </div>
+
+                    <div>
+                      <h3 className="text-lg font-bold text-white tracking-tight">{fb.subject}</h3>
+                      <p className="text-sm font-medium text-slate-300 mt-2 leading-relaxed bg-white/5 p-4 rounded-2xl whitespace-pre-line border border-white/5">
+                        {fb.content}
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-y-2 gap-x-4 pt-2 text-xs text-slate-400 font-medium">
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 bg-slate-500 rounded-full" />
+                        <span>Submitted By: <strong className="text-white">{fb.userName}</strong></span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 bg-slate-500 rounded-full" />
+                        <span>Email: <strong className="text-slate-300 font-mono">{fb.userEmail}</strong></span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 bg-slate-500 rounded-full" />
+                        <span>User Role: <strong className="text-slate-300 capitalize">{fb.userRole}</strong></span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-row md:flex-col items-center justify-end gap-2 self-end md:self-start shrink-0">
+                    {fb.status !== 'resolved' && (
+                      <button
+                        onClick={async () => {
+                          try {
+                            await updateDoc(doc(db, 'feedbacks', fb.id), { status: 'resolved' });
+                          } catch (err) {
+                            console.error("Failed to resolve feedback:", err);
+                          }
+                        }}
+                        className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-4 py-2.5 rounded-xl flex items-center gap-1.5 transition-all shadow-md shadow-emerald-600/15 cursor-pointer active:scale-98"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        <span>Mark Resolved</span>
+                      </button>
+                    )}
+                    <button
+                      onClick={async () => {
+                        if (confirm("Are you sure you want to delete this feedback report?")) {
+                          try {
+                            await deleteDoc(doc(db, 'feedbacks', fb.id));
+                          } catch (err) {
+                            console.error("Failed to delete feedback:", err);
+                          }
+                        }
+                      }}
+                      className="bg-white/5 hover:bg-rose-500/20 hover:text-rose-400 text-slate-400 font-bold text-xs px-4 py-2.5 rounded-xl flex items-center gap-1.5 transition-all border border-white/10 cursor-pointer hover:border-rose-500/20"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Delete</span>
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            ))
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

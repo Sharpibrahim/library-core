@@ -3,6 +3,9 @@ import { Classroom, User, ClassAssignment, ClassSubmission } from '../types';
 import { ArrowLeft, Users, FileText, CheckCircle2, MessageSquare, Plus, Clock, Copy, MoreVertical, Edit2, Upload, Video } from 'lucide-react';
 import { motion } from 'motion/react';
 import { ClassroomConference } from './ClassroomConference';
+import { RichTextEditor } from './RichTextEditor';
+import { storage } from '../firebase';
+import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 
 interface ClassroomDetailProps {
   classId: string;
@@ -36,7 +39,76 @@ export function ClassroomDetail({ classId, user, onBack }: ClassroomDetailProps)
   const [feedbackText, setFeedbackText] = useState('');
   const [gradingStatus, setGradingStatus] = useState<'completed' | 'needs_improvement'>('completed');
 
+  const [isEditingWork, setIsEditingWork] = useState(false);
+  const [editWorkTitle, setEditWorkTitle] = useState('');
+  const [editWorkDesc, setEditWorkDesc] = useState('');
+  const [editWorkType, setEditWorkType] = useState('homework');
+  const [editWorkTopic, setEditWorkTopic] = useState('');
+  const [editWorkDueDate, setEditWorkDueDate] = useState('');
+
+  const startEditingAssignment = (assignObj: any) => {
+    if (!assignObj) return;
+    setEditWorkTitle(assignObj.title || '');
+    setEditWorkDesc(assignObj.description || '');
+    setEditWorkType(assignObj.assignment_type || 'homework');
+    setEditWorkTopic(assignObj.topic_id ? String(assignObj.topic_id) : '');
+    setEditWorkDueDate(assignObj.due_date ? String(assignObj.due_date).substring(0, 10) : '');
+    setIsEditingWork(true);
+  };
+
+  const handleSaveEditWork = async () => {
+    if (!editWorkTitle.trim()) return;
+    try {
+      const res = await fetch(`/api/assignments/${activeAssignmentId}`, {
+         method: 'PUT',
+         headers: { 'Content-Type': 'application/json' },
+         body: JSON.stringify({
+            topic_id: editWorkTopic || null,
+            title: editWorkTitle,
+            description: editWorkDesc,
+            assignment_type: editWorkType,
+            due_date: editWorkDueDate || null
+         })
+      });
+      if (res.ok) {
+         setIsEditingWork(false);
+         // Refresh assignment details
+         const detailRes = await fetch(`/api/assignments/${activeAssignmentId}`);
+         if (detailRes.ok) {
+            setAssignmentDetails(await detailRes.json());
+         }
+         fetchData(); // reload class details
+         alert("Assignment updated successfully!");
+      } else {
+         alert("Failed to update assignment.");
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Error saving assignment.");
+    }
+  };
+
+  const handleDeleteWork = async () => {
+    if (!window.confirm("Are you sure you want to delete this assignment? All student submissions will also be deleted.")) return;
+    try {
+      const res = await fetch(`/api/assignments/${activeAssignmentId}`, {
+         method: 'DELETE'
+      });
+      if (res.ok) {
+         setActiveAssignmentId(null);
+         fetchData(); // reload class details
+         alert("Assignment deleted successfully.");
+      } else {
+         alert("Failed to delete assignment.");
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Error deleting assignment.");
+    }
+  };
+
   useEffect(() => {
+    setIsEditingWork(false);
     if (!activeAssignmentId) {
       setAssignmentDetails(null);
       setSubmissionText('');
@@ -148,24 +220,36 @@ export function ClassroomDetail({ classId, user, onBack }: ClassroomDetailProps)
          if (!file) return;
          
          setIsUploading(true);
-         const formData = new FormData();
-         formData.append('file', file);
          
          try {
-            const res = await fetch('/api/upload', {
-               method: 'POST',
-               body: formData,
+            console.log('[CLASSROOM] Attaching file directly to Firebase Storage...');
+            const cleanFileName = file.name.replace(/[^a-zA-Z0-9.]/g, '_');
+            const storagePath = `submissions/${user.uid}/${Date.now()}-${cleanFileName}`;
+            const storageRef = ref(storage, storagePath);
+            const uploadTask = uploadBytesResumable(storageRef, file);
+
+            await new Promise<void>((resolve, reject) => {
+               uploadTask.on(
+                  'state_changed',
+                  null,
+                  (error) => {
+                     console.error('[CLASSROOM] Firebase Storage upload error:', error);
+                     reject(error);
+                  },
+                  () => {
+                     resolve();
+                  }
+               );
             });
-            if (res.ok) {
-               const data = await res.json();
-               setUploadedFileUrl(data.url);
-               setUploadedFileName(file.name);
-            } else {
-               alert("Failed to upload document file.");
-            }
+
+            const cloudUrl = await getDownloadURL(uploadTask.snapshot.ref);
+            console.log('[CLASSROOM] Direct Firebase Storage upload complete. URL:', cloudUrl);
+
+            setUploadedFileUrl(cloudUrl);
+            setUploadedFileName(file.name);
          } catch (err) {
             console.error(err);
-            alert("Error uploading file.");
+            alert("Error uploading file to storage. Please try again.");
          } finally {
             setIsUploading(false);
          }
@@ -239,33 +323,148 @@ export function ClassroomDetail({ classId, user, onBack }: ClassroomDetailProps)
             </button>
             
             <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-8 space-y-8">
-               {/* Header */}
-               <div className="flex items-start gap-4 border-b border-gray-100 pb-8">
-                  <div className="w-12 h-12 bg-purple-100 text-purple-600 rounded-full flex items-center justify-center shrink-0">
-                     <FileText className="w-6 h-6" />
-                  </div>
-                  <div className="flex-1">
-                     <div className="flex items-center gap-2 mb-1">
-                        <span className="uppercase text-[10px] font-black tracking-widest text-purple-600 bg-purple-50 px-2.5 py-1 rounded-md">{displayType}</span>
-                        {localAssignment?.due_date && (
-                           <span className="text-xs text-slate-500 flex items-center gap-1">
-                              <Clock className="w-3.5 h-3.5" /> Due {new Date(localAssignment.due_date).toLocaleDateString()}
-                           </span>
-                        )}
+               {isEditingWork ? (
+                  <div className="space-y-6">
+                     <div className="flex items-center justify-between pb-4 border-b">
+                        <h2 className="text-2xl font-bold text-gray-900">✏️ Edit Assignment / Material</h2>
+                        <button 
+                           onClick={() => setIsEditingWork(false)}
+                           className="text-sm font-semibold text-gray-500 hover:text-gray-950 bg-gray-50 hover:bg-gray-100 px-3 py-1.5 rounded-xl transition"
+                        >
+                           Cancel
+                        </button>
                      </div>
-                     <h2 className="text-3xl font-bold text-gray-900">{displayTitle}</h2>
+                     
+                     <div>
+                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Title</label>
+                        <input 
+                          type="text" 
+                          placeholder="Assignment title" 
+                          className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-600 focus:outline-none font-medium text-slate-900"
+                          value={editWorkTitle}
+                          onChange={e => setEditWorkTitle(e.target.value)}
+                        />
+                     </div>
+                     
+                     <div>
+                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Instructions & Notes (Word Processor)</label>
+                        <RichTextEditor 
+                           value={editWorkDesc}
+                           onChange={setEditWorkDesc}
+                           placeholder="Type notes, lecture materials or homework instructions formatted like Microsoft Word..."
+                        />
+                     </div>
+                     <div className="hidden">
+                        <label className="hidden">Old Textarea</label>
+                        <textarea 
+                          placeholder="Type assignment content, material details, or questions directly in the software..." 
+                          className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-600 focus:outline-none min-h-[250px] font-sans text-slate-900"
+                          value={editWorkDesc}
+                          onChange={e => setEditWorkDesc(e.target.value)}
+                        />
+                     </div>
+
+                     <div className="grid grid-cols-2 gap-4">
+                        <div>
+                           <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Type</label>
+                           <select 
+                             className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-600 focus:outline-none text-slate-900"
+                             value={editWorkType}
+                             onChange={e => setEditWorkType(e.target.value)}
+                           >
+                              <option value="homework">Homework</option>
+                              <option value="revision">Revision</option>
+                              <option value="test">Test</option>
+                              <option value="material">Material (No Submission)</option>
+                           </select>
+                        </div>
+                        <div>
+                           <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Topic</label>
+                           <select 
+                             className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-600 focus:outline-none text-slate-900"
+                             value={editWorkTopic}
+                             onChange={e => setEditWorkTopic(e.target.value)}
+                           >
+                              <option value="">No Topic</option>
+                              {cls.topics?.map((t: any) => (
+                                 <option key={t.id} value={t.id}>{t.title}</option>
+                              ))}
+                           </select>
+                        </div>
+                     </div>
+
+                     <div>
+                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Due Date</label>
+                        <input 
+                          type="date" 
+                          className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-600 focus:outline-none text-slate-900"
+                          value={editWorkDueDate}
+                          onChange={e => setEditWorkDueDate(e.target.value)}
+                        />
+                     </div>
+
+                     <div className="flex justify-end gap-3 pt-6 border-t border-gray-100">
+                        <button onClick={() => setIsEditingWork(false)} className="px-6 py-3 text-gray-500 font-bold hover:bg-gray-50 rounded-xl transition-colors">Cancel</button>
+                        <button onClick={handleSaveEditWork} disabled={!editWorkTitle.trim()} className="px-6 py-3 bg-purple-600 text-white font-bold rounded-xl hover:bg-purple-700 disabled:opacity-50 transition-colors shadow-lg shadow-purple-600/20">Save Changes</button>
+                     </div>
                   </div>
-               </div>
+               ) : (
+                  <>
+               {/* Header */}
+                      <div className="flex items-start justify-between border-b border-gray-100 pb-8">
+                         <div className="flex items-start gap-4">
+                            <div className="w-12 h-12 bg-purple-100 text-purple-600 rounded-full flex items-center justify-center shrink-0">
+                               <FileText className="w-6 h-6" />
+                            </div>
+                            <div className="flex-1">
+                               <div className="flex items-center gap-2 mb-1">
+                                  <span className="uppercase text-[10px] font-black tracking-widest text-purple-600 bg-purple-50 px-2.5 py-1 rounded-md">{displayType}</span>
+                                  {localAssignment?.due_date && (
+                                     <span className="text-xs text-slate-500 flex items-center gap-1">
+                                        <Clock className="w-3.5 h-3.5" /> Due {new Date(localAssignment.due_date).toLocaleDateString()}
+                                     </span>
+                                  )}
+                               </div>
+                               <h2 className="text-3xl font-bold text-gray-900">{displayTitle}</h2>
+                            </div>
+                         </div>
+
+                         {isTeacher && (
+                            <div className="flex gap-2 shrink-0">
+                               <button 
+                                 onClick={() => {
+                                   const assignToEdit = assignmentDetails || localAssignment;
+                                   startEditingAssignment(assignToEdit);
+                                 }}
+                                 className="px-4 py-2 hover:bg-slate-100 font-bold text-xs text-purple-600 border border-purple-200 hover:border-purple-600 rounded-xl transition-all"
+                               >
+                                 ✏️ Edit
+                               </button>
+                               <button 
+                                 onClick={handleDeleteWork}
+                                 className="px-4 py-2 hover:bg-red-50 font-bold text-xs text-red-500 border border-red-200 hover:border-red-500 rounded-xl transition-all"
+                               >
+                                 🗑️ Delete
+                               </button>
+                            </div>
+                         )}
+                      </div>
                
                {/* Description */}
                <div>
                   <h3 className="text-lg font-bold text-gray-900 mb-3">Instructions</h3>
-                  <div className="prose max-w-none text-gray-700 bg-slate-50 border border-slate-100 p-6 rounded-2xl whitespace-pre-wrap">
-                     {displayDesc || "No instructions provided for this assignment."}
+                  <div className="prose max-w-none text-slate-800 bg-slate-50 border border-slate-100 p-6 rounded-2xl">
+                     {displayDesc ? (
+                       <div dangerouslySetInnerHTML={{ __html: displayDesc }} className="rich-notes-view font-sans list-inside" />
+                     ) : (
+                       <p className="text-slate-400 italic">No instructions or notes provided for this assignment.</p>
+                     )}
                   </div>
                </div>
+                   </>
+                )}
 
-               {!isTeacher ? (
+                {!isEditingWork && (!isTeacher ? (
                   <div className="border-t border-gray-100 pt-8">
                      <h3 className="text-xl font-bold text-gray-900 mb-4">Your Work</h3>
                      
@@ -492,7 +691,7 @@ export function ClassroomDetail({ classId, user, onBack }: ClassroomDetailProps)
                         </div>
                      )}
                   </div>
-               )}
+               ))}
             </div>
          </div>
       );
@@ -730,12 +929,11 @@ export function ClassroomDetail({ classId, user, onBack }: ClassroomDetailProps)
                    </div>
                    
                    <div>
-                      <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Description / Instructions</label>
-                      <textarea 
-                        placeholder="Add instructions for students..." 
-                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-600 focus:outline-none min-h-[120px] resize-none"
+                      <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Description / Notes & Instructions (Word Processor)</label>
+                      <RichTextEditor 
                         value={newWorkDesc}
-                        onChange={e => setNewWorkDesc(e.target.value)}
+                        onChange={setNewWorkDesc}
+                        placeholder="Type notes, lecture materials or homework instructions formatted like Microsoft Word..."
                       />
                    </div>
 

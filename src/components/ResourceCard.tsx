@@ -12,7 +12,8 @@ import {
   Book,
   Video,
   Image as ImageIcon,
-  CheckCircle2
+  CheckCircle2,
+  Heart
 } from 'lucide-react';
 import { Resource, User } from '../types';
 import { motion } from 'motion/react';
@@ -26,9 +27,11 @@ interface ResourceCardProps {
   onDelete?: (id: string) => void;
   onBorrow?: (id: number) => void;
   onReturn?: (id: number) => void;
+  isLiked?: boolean;
+  onToggleLike?: (resource: Resource) => void;
 }
 
-export function ResourceCard({ resource, currentUser, onRead, onEdit, onDelete, onBorrow, onReturn }: ResourceCardProps) {
+export function ResourceCard({ resource, currentUser, onRead, onEdit, onDelete, onBorrow, onReturn, isLiked = false, onToggleLike }: ResourceCardProps) {
   const [isOffline, setIsOffline] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const isPDF = resource.type?.toLowerCase() === 'pdf' || resource.fileUrl?.toLowerCase().split('?')[0].endsWith('.pdf');
@@ -114,6 +117,19 @@ export function ResourceCard({ resource, currentUser, onRead, onEdit, onDelete, 
               </div>
             )}
           </div>
+
+          {onToggleLike && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleLike(resource);
+              }}
+              className="absolute top-3 right-3 z-30 p-2.5 rounded-full bg-white/95 backdrop-blur-md border border-border text-red-500 hover:text-red-600 hover:scale-110 active:scale-95 transition-all shadow-md flex items-center justify-center cursor-pointer"
+              title={isLiked ? "Unlike and remove from shelf" : "Like and save to shelf"}
+            >
+              <Heart className={`w-4 h-4 ${isLiked ? 'fill-current text-red-500' : 'text-slate-400'}`} />
+            </button>
+          )}
 
           <div className="absolute bottom-4 left-4 right-4 translate-y-4 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-300">
             <button 

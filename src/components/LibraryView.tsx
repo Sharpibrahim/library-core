@@ -31,8 +31,9 @@ import { Resource, User, StudySet } from '../types';
 import { ResourceCard } from './ResourceCard';
 import { getGeminiResponse } from '../services/gemini';
 import { getSubjectCover } from '../constants/subjectImages';
-import { db } from '../firebase';
-import { onSnapshot, collection, query, orderBy, where, deleteDoc, doc, addDoc } from 'firebase/firestore';
+import { db, auth, handleFirestoreError, OperationType } from '../firebase';
+import { onAuthStateChanged } from 'firebase/auth';
+import { onSnapshot, collection, query, orderBy, where, deleteDoc, doc, addDoc, setDoc } from 'firebase/firestore';
 
 interface LibraryViewProps {
   resources: Resource[];
@@ -54,15 +55,22 @@ const MAIN_CATEGORIES = [
   { id: 'note', label: 'Expert Notes', icon: ClipboardList, color: 'bg-emerald-500/10 text-emerald-600', borderColor: 'border-emerald-500/20' },
 ];
 
-const GENRES = [
-  'All Genres',
-  'Science',
-  'Mathematics',
-  'History',
-  'Literature',
-  'Technology',
-  'Art',
-  'Philosophy'
+const SUBJECTS = [
+  'All Subjects',
+  'Mathematics', 
+  'Physics', 
+  'Chemistry', 
+  'Biology', 
+  'History', 
+  'Geography', 
+  'Economics', 
+  'Literature', 
+  'Entrepreneurship', 
+  'Religious Education', 
+  'Kiswahili', 
+  'Fine Art', 
+  'Computer Studies', 
+  'General Paper'
 ];
 
 const CLASS_LEVELS = ['All Levels', 'S1', 'S2', 'S3', 'S4', 'S5', 'S6'];
@@ -70,15 +78,84 @@ const CLASS_LEVELS = ['All Levels', 'S1', 'S2', 'S3', 'S4', 'S5', 'S6'];
 export function LibraryView({ resources, user, onRead, onDelete, externalSearchQuery = '', setSearchQuery, createNotification }: LibraryViewProps) {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [activeMainCategory, setActiveMainCategory] = useState('all');
-  const [selectedGenre, setSelectedGenre] = useState('All Genres');
+  const [selectedSubject, setSelectedSubject] = useState('All Subjects');
   const [selectedClass, setSelectedClass] = useState('All Levels');
   const [internalSearchQuery, setInternalSearchQuery] = useState('');
   const [isAiSearching, setIsAiSearching] = useState(false);
   const [aiSearchResults, setAiSearchResults] = useState<string[] | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [studySets, setStudySets] = useState<StudySet[]>([]);
+  const [likedResourceIds, setLikedResourceIds] = useState<string[]>([]);
+  const [firebaseUser, setFirebaseUser] = useState(auth.currentUser);
 
   useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (u) => {
+      setFirebaseUser(u);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Listen to user's liked subcollection to update active hearts in real-time
+  useEffect(() => {
+    if (!user?.uid || !firebaseUser || firebaseUser.uid !== user.uid) return;
+    const shelfRef = collection(db, 'users', user.uid, 'shelf');
+    const unsubscribe = onSnapshot(shelfRef, (snapshot) => {
+      const ids: string[] = [];
+      snapshot.forEach(docSnap => {
+        const rId = docSnap.data().resourceId;
+        if (rId) ids.push(rId);
+      });
+      setLikedResourceIds(ids);
+    }, (err) => {
+      console.error('Error fetching liked shelf resource IDs:', err);
+      handleFirestoreError(err, OperationType.LIST, shelfRef.path);
+    });
+    return () => unsubscribe();
+  }, [user?.uid, firebaseUser]);
+
+  const handleToggleLike = async (resource: Resource) => {
+    if (!user?.uid) {
+      if (createNotification) {
+        createNotification('Authentication Required', 'Please log in to save books to your personal shelf.', 'error');
+      }
+      return;
+    }
+    const resourceStringId = String(resource.id);
+    const isCurrentlyLiked = likedResourceIds.includes(resourceStringId);
+    const itemRef = doc(db, 'users', user.uid, 'shelf', resourceStringId);
+    
+    try {
+      if (isCurrentlyLiked) {
+        await deleteDoc(itemRef);
+        if (createNotification) {
+          createNotification('Removed from Shelf', `"${resource.title}" was removed from your shelf.`, 'info');
+        }
+      } else {
+        const shelfItem = {
+          resourceId: resourceStringId,
+          title: resource.title,
+          author: resource.author || 'Unknown',
+          type: resource.type || 'pdf',
+          coverUrl: resource.coverUrl || null,
+          subject: resource.subject || 'General',
+          category: 'Favorites', // default folder category when liked
+          likedAt: new Date().toISOString()
+        };
+        await setDoc(itemRef, shelfItem);
+        if (createNotification) {
+          createNotification('Saved to Shelf', `"${resource.title}" was added to your shelf!`, 'success');
+        }
+      }
+    } catch (e: any) {
+      console.error('Error toggling shelf item like:', e);
+      if (createNotification) {
+        createNotification('Action Failed', 'Failed to update shelf item.', 'error');
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (!firebaseUser) return;
     const q = query(collection(db, 'study_sets'), orderBy('createdAt', 'desc'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const sets = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as StudySet));
@@ -114,7 +191,7 @@ export function LibraryView({ resources, user, onRead, onDelete, externalSearchQ
       setStudySets(sets);
     });
     return () => unsubscribe();
-  }, [user.uid, resources.length]);
+  }, [user.uid, resources.length, firebaseUser]);
 
   const handleDeleteStudySet = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -166,14 +243,17 @@ export function LibraryView({ resources, user, onRead, onDelete, externalSearchQ
 
   const filteredResources = resources.filter(r => {
     // Priority 1: AI Results
+    let matchesAi = true;
     if (aiSearchResults && aiSearchResults.length > 0) {
-      return aiSearchResults.includes(r.id);
+      matchesAi = aiSearchResults.includes(r.id);
     }
 
-    const matchesSearch = r.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                         r.author.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         (r.subject?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
-                         (r.className?.toLowerCase() || '').includes(searchQuery.toLowerCase());
+    const matchesSearch = aiSearchResults ? true : (
+      r.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
+      r.author.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (r.subject?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
+      (r.className?.toLowerCase() || '').includes(searchQuery.toLowerCase())
+    );
     
     const category = getResourceCategory(r);
 
@@ -182,15 +262,15 @@ export function LibraryView({ resources, user, onRead, onDelete, externalSearchQ
       matchesMainCategory = category === activeMainCategory;
     }
 
-    const matchesGenre = selectedGenre === 'All Genres' || r.genre === selectedGenre;
+    const matchesSubject = selectedSubject === 'All Subjects' || r.subject === selectedSubject || r.genre === selectedSubject;
     const matchesClass = selectedClass === 'All Levels' || r.className === selectedClass || (selectedClass === 'O-Level' && ['S1','S2','S3','S4'].includes(r.className || ''));
 
-    return matchesSearch && matchesMainCategory && matchesGenre && matchesClass;
+    return matchesAi && matchesSearch && matchesMainCategory && matchesSubject && matchesClass;
   });
 
   const renderResourceRow = (title: string, catId: string, icon: any) => {
     const Icon = icon;
-    const items = resources.filter(r => getResourceCategory(r) === catId).slice(0, 6);
+    const items = filteredResources.filter(r => getResourceCategory(r) === catId).slice(0, 6);
     if (items.length === 0) return null;
 
     return (
@@ -214,7 +294,15 @@ export function LibraryView({ resources, user, onRead, onDelete, externalSearchQ
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {items.map(r => (
-            <ResourceCard key={r.id} resource={r} currentUser={user} onRead={onRead} onDelete={onDelete} />
+            <ResourceCard 
+              key={r.id} 
+              resource={r} 
+              currentUser={user} 
+              onRead={onRead} 
+              onDelete={onDelete} 
+              isLiked={likedResourceIds.includes(r.id)}
+              onToggleLike={handleToggleLike}
+            />
           ))}
         </div>
       </div>
@@ -305,17 +393,17 @@ export function LibraryView({ resources, user, onRead, onDelete, externalSearchQ
               <h3 className="text-sm font-black uppercase tracking-[0.15em] text-text-main">Subjects</h3>
             </div>
             <div className="flex flex-wrap gap-2.5 mb-10">
-              {GENRES.map((genre) => (
+              {SUBJECTS.map((subject) => (
                 <button
-                  key={genre}
-                  onClick={() => setSelectedGenre(genre)}
+                  key={subject}
+                  onClick={() => setSelectedSubject(subject)}
                   className={`px-4 py-2.5 rounded-[1.2rem] text-xs font-bold transition-all border-2 ${
-                    selectedGenre === genre 
+                    selectedSubject === subject 
                       ? 'bg-primary text-white border-primary shadow-lg shadow-primary/20 scale-105' 
                       : 'bg-section text-text-secondary border-transparent hover:border-border hover:bg-white hover:text-text-main'
                   }`}
                 >
-                  {genre}
+                  {subject}
                 </button>
               ))}
             </div>
@@ -442,7 +530,7 @@ export function LibraryView({ resources, user, onRead, onDelete, externalSearchQ
                   </div>
                 ))}
               </motion.div>
-            ) : activeMainCategory === 'all' && !searchQuery ? (
+            ) : activeMainCategory === 'all' && !searchQuery && filteredResources.length > 0 ? (
               <motion.div 
                 key="grouped-view"
                 initial={{ opacity: 0 }}
@@ -476,6 +564,8 @@ export function LibraryView({ resources, user, onRead, onDelete, externalSearchQ
                       currentUser={user}
                       onRead={onRead}
                       onDelete={onDelete}
+                      isLiked={likedResourceIds.includes(String(resource.id))}
+                      onToggleLike={handleToggleLike}
                     />
                   </motion.div>
                 ))}
@@ -497,7 +587,7 @@ export function LibraryView({ resources, user, onRead, onDelete, externalSearchQ
                   onClick={() => {
                     setInternalSearchQuery('');
                     setActiveMainCategory('all');
-                    setSelectedGenre('All Genres');
+                    setSelectedSubject('All Subjects');
                   }}
                   className="px-12 py-5 bg-primary text-white rounded-[1.8rem] font-black shadow-2xl shadow-primary/30 hover:scale-[1.08] transition-all uppercase tracking-widest text-xs"
                 >

@@ -9,6 +9,7 @@ interface ClassroomListProps {
 }
 
 export function ClassroomList({ user }: ClassroomListProps) {
+  const isTeacher = user.role === 'teacher' || user.role === 'admin' || user.username === 'sharpibrah@gmail.com' || user.username === 'sharpwhite@gmail.com' || user.email === 'sharpibrah@gmail.com' || user.email === 'sharpwhite@gmail.com';
   const [classes, setClasses] = useState<Classroom[]>(() => {
     const cached = localStorage.getItem(`classes_${user.uid}`);
     return cached ? JSON.parse(cached) : [];
@@ -119,8 +120,6 @@ export function ClassroomList({ user }: ClassroomListProps) {
   if (activeClassId) {
      return <ClassroomDetail classId={activeClassId} user={user} onBack={() => setActiveClassId(null)} />;
   }
-
-  const isTeacher = user.role === 'teacher' || user.role === 'admin';
 
   return (
     <div className="max-w-[1200px] mx-auto w-full space-y-8 animate-in fade-in duration-500 pb-20 font-sans">
