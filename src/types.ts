@@ -28,6 +28,7 @@ export interface User {
   focusMode?: boolean;
   cloudSync?: boolean;
   notesUi?: boolean;
+  securityQuestions?: { q: string; a: string }[];
 }
 
 export interface DirectMessage {

@@ -79,6 +79,17 @@ export function SettingsView({ user, theme, onThemeChange, onUserUpdate }: Setti
   // Local state for profile edits
   const [editedUser, setEditedUser] = useState<UserType>({ ...user });
   
+  const [questions, setQuestions] = useState<{ q: string; a: string }[]>(() => {
+    if (user.securityQuestions && Array.isArray(user.securityQuestions) && user.securityQuestions.length === 3) {
+      return [...user.securityQuestions];
+    }
+    return [
+      { q: 'What was the name of your first school?', a: '' },
+      { q: 'What is your mother\'s maiden name?', a: '' },
+      { q: 'What was the name of your first pet?', a: '' }
+    ];
+  });
+  
   // UI Preferences (Local)
   const [uiSize, setUiSize] = useState(() => localStorage.getItem('library_core_ui_size') || 'medium');
   const [fontSize, setFontSize] = useState(() => {
@@ -139,7 +150,7 @@ export function SettingsView({ user, theme, onThemeChange, onUserUpdate }: Setti
     const userToSave = customUserObj || editedUser;
     try {
       const userRef = doc(db, 'users', user.uid);
-      const updatePayload = {
+      const updatePayload: any = {
         fullName: userToSave.fullName || '',
         email: userToSave.email || '',
         avatarUrl: userToSave.avatarUrl || '',
@@ -157,7 +168,29 @@ export function SettingsView({ user, theme, onThemeChange, onUserUpdate }: Setti
         autoSummaries: userToSave.autoSummaries ?? true,
         dynamicQuizzes: userToSave.dynamicQuizzes ?? true
       };
+      
+      if (userToSave.securityQuestions) {
+        updatePayload.securityQuestions = userToSave.securityQuestions;
+      }
+      
       await updateDoc(userRef, updatePayload);
+      
+      // Update local SQLite as well
+      if (userToSave.securityQuestions && Array.isArray(userToSave.securityQuestions)) {
+        try {
+          await fetch('/api/users/update-security-questions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              username: user.username,
+              securityQuestions: userToSave.securityQuestions
+            })
+          });
+        } catch (e) {
+          console.warn('Could not sync security questions to local database backend:', e);
+        }
+      }
+
       onUserUpdate({
         ...user,
         ...userToSave,
@@ -642,6 +675,75 @@ export function SettingsView({ user, theme, onThemeChange, onUserUpdate }: Setti
                    >
                       <div className="w-3 h-3 bg-white rounded-full shadow-lg" />
                    </button>
+                </div>
+              </section>
+
+              <section className="pt-8 border-t border-gray-100 space-y-4">
+                <div className="flex items-center gap-2">
+                  <Shield className="w-4 h-4 text-violet-600" />
+                  <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Account Recovery Questions</h4>
+                </div>
+                <p className="text-xs text-text-secondary leading-normal">
+                  Configure exactly 3 security questions and correct answers to safely reset your password using only your username in the future.
+                </p>
+                
+                <div className="space-y-4 pt-2">
+                  {[0, 1, 2].map((idx) => (
+                    <div key={idx} className="p-5 rounded-2xl bg-gray-50/50 border border-gray-100 space-y-3">
+                      <div>
+                        <label className="block text-[10px] font-bold text-text-muted uppercase tracking-wider mb-1">
+                          Question {idx + 1}
+                        </label>
+                        <select
+                          value={questions[idx].q}
+                          onChange={(e) => {
+                            const newQ = [...questions];
+                            newQ[idx].q = e.target.value;
+                            setQuestions(newQ);
+                            setEditedUser(prev => ({ ...prev, securityQuestions: newQ }));
+                          }}
+                          className="w-full px-4 py-2 border border-border rounded-xl text-xs font-semibold bg-white text-text-main focus:outline-none focus:ring-2 focus:ring-primary/20"
+                        >
+                          <option value="What was the name of your first school?">What was the name of your first school?</option>
+                          <option value="What is your mother's maiden name?">What is your mother's maiden name?</option>
+                          <option value="What was the name of your first pet?">What was the name of your first pet?</option>
+                          <option value="In what city were you born?">In what city were you born?</option>
+                          <option value="What is your favorite high school subject?">What is your favorite high school subject?</option>
+                          <option value="What was the make and model of your first car?">What was the make and model of your first car?</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-text-muted uppercase tracking-wider mb-1">
+                          Answer {idx + 1}
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="Provide the correct answer"
+                          value={questions[idx].a}
+                          onChange={(e) => {
+                            const newQ = [...questions];
+                            newQ[idx].a = e.target.value;
+                            setQuestions(newQ);
+                            setEditedUser(prev => ({ ...prev, securityQuestions: newQ }));
+                          }}
+                          className="w-full px-4 py-2 border border-border rounded-xl text-xs font-medium bg-white text-text-main placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary/20"
+                        />
+                      </div>
+                    </div>
+                  ))}
+                  
+                  <div className="pt-2 flex justify-end">
+                    <button
+                      type="button"
+                      disabled={isSaving}
+                      onClick={() => handleSavePreferences()}
+                      className="px-6 py-3.5 bg-primary hover:bg-primary-hover text-white rounded-2xl text-xs font-bold uppercase tracking-widest shadow-lg shadow-primary/20 flex items-center gap-2"
+                    >
+                      {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <SaveIcon className="w-4 h-4" />}
+                      Save Security Answers
+                    </button>
+                  </div>
                 </div>
               </section>
 

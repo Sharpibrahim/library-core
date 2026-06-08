@@ -3,7 +3,7 @@ import {
   Video, VideoOff, Mic, MicOff, Monitor, PhoneOff, 
   Users, Settings, ShieldAlert, Sparkles, MessageSquare, 
   Volume2, Signal, MoreHorizontal, Maximize2, Camera, LogIn,
-  Check, Bell, Sparkle, RefreshCw, X
+  Check, Bell, Sparkle, RefreshCw, X, Trash2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { User } from '../types';
@@ -81,6 +81,38 @@ function playMeetSound(type: 'join' | 'leave' | 'chat') {
   }
 }
 
+// Text-to-Speech Engine for reading classroom messages out loud
+function speakMessage(sender: string, text: string) {
+  try {
+    if (!window.speechSynthesis) return;
+    // Cancel any ongoing speech to avoid overlap
+    window.speechSynthesis.cancel();
+    
+    // Clean up text for clearer speech synthesis
+    const cleanText = text.replace(/https?:\/\/\S+/gi, 'a link');
+    const utterance = new SpeechSynthesisUtterance(`${sender} says: ${cleanText}`);
+    
+    // Choose appropriate voice/pitch/rate based on sender to simulate different people!
+    if (sender.includes('Evelyn') || sender.includes('Carter') || sender.includes('Professor')) {
+      utterance.pitch = 1.1;
+      utterance.rate = 0.95;
+    } else if (sender.includes('Sophia') || sender.includes('Smith')) {
+      utterance.pitch = 1.25;
+      utterance.rate = 1.0;
+    } else if (sender.includes('Alex')) {
+      utterance.pitch = 0.85;
+      utterance.rate = 1.05;
+    } else {
+      utterance.pitch = 1.0;
+      utterance.rate = 1.0;
+    }
+    
+    window.speechSynthesis.speak(utterance);
+  } catch (err) {
+    console.warn('[SPEECH] Failed to speak message:', err);
+  }
+}
+
 export function ClassroomConference({ classId, className, user, onLeave }: ClassroomConferenceProps) {
   // Navigation & Joined status
   const [isJoined, setIsJoined] = useState(false);
@@ -102,8 +134,17 @@ export function ClassroomConference({ classId, className, user, onLeave }: Class
   const [activeSpeaker, setActiveSpeaker] = useState<string | null>(null);
   const [connectionTime, setConnectionTime] = useState(0);
   const [activeSidebar, setActiveSidebar] = useState<'users' | 'chat' | null>(null);
-  const [chatMessages, setChatMessages] = useState<{ sender: string, text: string, time: string }[]>([]);
+  const [chatMessages, setChatMessages] = useState<{ id?: string, senderId?: string | null, sender: string, text: string, time: string }[]>([]);
   const [chatInput, setChatInput] = useState('');
+
+  // Voice narration & active load state systems
+  const [isVoiceEnabled, setIsVoiceEnabled] = useState(true);
+  const isVoiceEnabledRef = useRef(isVoiceEnabled);
+  const isInitialLoadRef = useRef(true);
+
+  useEffect(() => {
+    isVoiceEnabledRef.current = isVoiceEnabled;
+  }, [isVoiceEnabled]);
 
   // Floating reactions & media configurations
   const [layoutMode, setLayoutMode] = useState<'grid' | 'theater'>('grid');
@@ -163,6 +204,19 @@ export function ClassroomConference({ classId, className, user, onLeave }: Class
     }, 4000);
   };
 
+  // Setup Delete Message Action from Live Lesson
+  const handleDeleteMessage = async (msgId: string) => {
+    if (!msgId || !classId) return;
+    try {
+      const msgDocRef = doc(db, 'classrooms', `${classId}_chat`, 'messages', msgId);
+      await deleteDoc(msgDocRef);
+      // Local filter to make it snap instantly in UI
+      setChatMessages(prev => prev.filter(m => m.id !== msgId));
+    } catch (err) {
+      console.error('[FIRESTORE] Failed to delete live comment:', err);
+    }
+  };
+
   // Setup Real-time live classroom messaging stream
   useEffect(() => {
     if (!classId) return;
@@ -198,22 +252,29 @@ export function ClassroomConference({ classId, className, user, onLeave }: Class
         }
 
         msgs.push({
+          id: docSnap.id,
           sender: data.sender,
+          senderId: data.senderId || null,
           text: data.text,
           time: formattedTime || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         });
       });
 
-      // Play audio chime when message arrives from any classmate/professor
-      if (msgs.length > 0) {
-        const lastMsg = msgs[msgs.length - 1];
-        const selfSender = user.fullName || user.username || 'Me';
-        if (lastMsg.sender !== selfSender) {
-          playMeetSound('chat');
+      setChatMessages(prev => {
+        // If a new message was added (not initial loading or deletions)
+        if (msgs.length > prev.length && !isInitialLoadRef.current) {
+          const lastMsg = msgs[msgs.length - 1];
+          const selfSender = user.fullName || user.username || 'Me';
+          if (lastMsg && lastMsg.sender !== selfSender) {
+            playMeetSound('chat');
+            if (isVoiceEnabledRef.current) {
+              speakMessage(lastMsg.sender, lastMsg.text);
+            }
+          }
         }
-      }
-
-      setChatMessages(msgs);
+        isInitialLoadRef.current = false;
+        return msgs;
+      });
     }, (error) => {
       console.error('[FIRESTORE] Real-time classroom live messages error:', error);
     });
@@ -548,32 +609,68 @@ export function ClassroomConference({ classId, className, user, onLeave }: Class
         }, 7500);
 
         // t = 13s: Dr. Carter types welcome message
-        setTimeout(() => {
-          setChatMessages(prev => [
-            ...prev, 
-            {
+        setTimeout(async () => {
+          try {
+            const chatCol = collection(db, 'classrooms', `${classId}_chat`, 'messages');
+            await addDoc(chatCol, {
               sender: "Dr. Evelyn Carter",
+              senderId: "teacher_host",
               text: "Welcome back to today's core module lecture, everyone! Today we are discussing offline client database indexing and live synchronization topologies. Feel free to use the React panel up top or drop questions inside the Chat sidebar.",
-              time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+              time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              createdAt: serverTimestamp()
+            });
+            addToast("Dr. Evelyn Carter commented in the chat.", 'https://api.dicebear.com/7.x/initials/svg?seed=Evelyn%20Carter');
+          } catch (e) {
+            console.warn("Could not post simulated teaching note to Firestore: ", e);
+            // Fallback local option
+            setChatMessages(prev => [
+              ...prev, 
+              {
+                id: 'sim_1',
+                senderId: 'teacher_host',
+                sender: "Dr. Evelyn Carter",
+                text: "Welcome back to today's core module lecture, everyone! Today we are discussing offline client database indexing and live synchronization topologies. Feel free to use the React panel up top or drop questions inside the Chat sidebar.",
+                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+              }
+            ]);
+            playMeetSound('chat');
+            if (isVoiceEnabledRef.current) {
+              speakMessage("Dr. Evelyn Carter", "Welcome back to today's core module lecture, everyone! Today we are discussing offline client database indexing and live synchronization topologies.");
             }
-          ]);
-          addToast("Dr. Evelyn Carter commented in the chat.", 'https://api.dicebear.com/7.x/initials/svg?seed=Evelyn%20Carter');
-          playMeetSound('chat');
+          }
         }, 13000);
 
         // t = 22s: Sophia unmutes and says hello
-        setTimeout(() => {
+        setTimeout(async () => {
           setSimulatedPeers(prev => prev.map(p => p.id === 'peer_2' ? { ...p, isMuted: false, isSpeaking: true } : p));
-          setChatMessages(prev => [
-            ...prev, 
-            {
+          try {
+            const chatCol = collection(db, 'classrooms', `${classId}_chat`, 'messages');
+            await addDoc(chatCol, {
               sender: "Sophia Smith",
+              senderId: "peer_2",
               text: "Excited for this chapter! The offline database sync patterns helped me immensely with my homework architecture outline.",
-              time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+              time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              createdAt: serverTimestamp()
+            });
+            addToast("Sophia Smith unmuted to comment.", 'https://api.dicebear.com/7.x/avataaars/svg?seed=Sophia');
+          } catch (e) {
+            console.warn("Could not post simulated peer comment to Firestore: ", e);
+            // Fallback local option
+            setChatMessages(prev => [
+              ...prev, 
+              {
+                id: 'sim_2',
+                senderId: 'peer_2',
+                sender: "Sophia Smith",
+                text: "Excited for this chapter! The offline database sync patterns helped me immensely with my homework architecture outline.",
+                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+              }
+            ]);
+            playMeetSound('chat');
+            if (isVoiceEnabledRef.current) {
+              speakMessage("Sophia Smith", "Excited for this chapter! The offline database sync patterns helped me immensely with my homework architecture outline.");
             }
-          ]);
-          addToast("Sophia Smith unmuted to comment.", 'https://api.dicebear.com/7.x/avataaars/svg?seed=Sophia');
-          playMeetSound('chat');
+          }
         }, 22050);
 
         // t = 32s: Alex react trigger on screen
@@ -674,6 +771,7 @@ export function ClassroomConference({ classId, className, user, onLeave }: Class
       const chatCollectionRef = collection(db, 'classrooms', `${classId}_chat`, 'messages');
       await addDoc(chatCollectionRef, {
         sender: user.fullName || user.username || 'Me',
+        senderId: user.uid,
         text: textToSend,
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         createdAt: serverTimestamp()
@@ -682,7 +780,9 @@ export function ClassroomConference({ classId, className, user, onLeave }: Class
       console.error('[FIRESTORE] Failed to post live comment:', err);
       // Local fallback
       setChatMessages(prev => [...prev, {
+        id: Math.random().toString(),
         sender: user.fullName || user.username || 'Me',
+        senderId: user.uid,
         text: textToSend,
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       }]);
@@ -1415,17 +1515,32 @@ export function ClassroomConference({ classId, className, user, onLeave }: Class
 
                   <div className="flex-1 overflow-y-auto space-y-4 pr-1 min-h-0 pb-4">
                     <p className="text-[10px] text-slate-500 text-center py-2 italic font-sans border-b border-slate-850/50">Comment updates save permanently using Cloud Firestore synchronization.</p>
-                    {chatMessages.map((m, i) => (
-                      <div key={i} className="space-y-1.5 text-xs">
-                        <div className="flex items-center justify-between group">
-                          <span className="font-bold text-slate-300">{m.sender}</span>
-                          <span className="text-[9px] text-slate-500">{m.time}</span>
+                    {chatMessages.map((m, i) => {
+                      const isMyMessage = m.senderId === user.uid || m.sender === (user.fullName || user.username || 'Me');
+                      const canDelete = isMyMessage || user.role === 'teacher' || user.role === 'admin';
+                      return (
+                        <div key={m.id || i} className="space-y-1.5 text-xs group/msg">
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-slate-300">{m.sender}</span>
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[9px] text-slate-500">{m.time}</span>
+                              {canDelete && m.id && (
+                                <button 
+                                  onClick={() => handleDeleteMessage(m.id!)}
+                                  className="text-slate-500 hover:text-red-400 p-0.5 rounded transition-colors cursor-pointer"
+                                  title="Delete message"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                          <div className="px-3.5 py-2.5 bg-slate-850 border border-slate-805 rounded-2xl text-slate-200 break-words font-sans">
+                            {m.text}
+                          </div>
                         </div>
-                        <div className="px-3.5 py-2.5 bg-slate-850 border border-slate-805 rounded-2xl text-slate-200 break-words font-sans">
-                          {m.text}
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
 
                   <form onSubmit={handleSendChat} className="mt-auto pt-4 border-t border-slate-800 flex gap-2 shrink-0">
@@ -1518,6 +1633,25 @@ export function ClassroomConference({ classId, className, user, onLeave }: Class
             title={isScreenSharing ? 'Stop Presenting Screen' : 'Present Entire Screen'}
           >
             <Monitor className="w-4 sm:w-5 h-4 sm:h-5" />
+          </button>
+
+          {/* TTS Speech Narration Toggle button */}
+          <button 
+            onClick={() => {
+              setIsVoiceEnabled(prev => !prev);
+              if (isVoiceEnabled && window.speechSynthesis) {
+                window.speechSynthesis.cancel();
+              }
+            }}
+            className={`w-10 sm:w-12 h-10 sm:h-12 rounded-xl flex flex-col items-center justify-center transition-all border cursor-pointer ${
+              isVoiceEnabled 
+                ? 'bg-emerald-600/10 border-emerald-500/20 text-emerald-400 hover:bg-emerald-600/20' 
+                : 'bg-slate-800 border-slate-700 text-slate-500 hover:bg-slate-700'
+            }`}
+            title={isVoiceEnabled ? 'Mute speech read-aloud feed' : 'Enable speech read-aloud feed'}
+          >
+            <Volume2 className={`w-4 sm:w-5 h-4 sm:h-5 ${isVoiceEnabled ? 'animate-bounce' : ''}`} />
+            <span className="text-[7px] uppercase font-bold mt-0.5 leading-none tracking-widest">{isVoiceEnabled ? 'TTS ON' : 'TTS OFF'}</span>
           </button>
 
           {/* Disconnect/Leave button */}

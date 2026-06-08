@@ -34,6 +34,7 @@ import {
   limit,
   setDoc,
   updateDoc,
+  deleteDoc,
   serverTimestamp
 } from 'firebase/firestore';
 import { db } from '../firebase';
@@ -125,6 +126,29 @@ export function ExpertChatView({ user }: ExpertChatViewProps) {
     });
     return () => unsub();
   }, []);
+
+  // --- Message deletion handler ---
+  const handleDeleteMessage = async (msgId: string) => {
+    if (!activeConvId) return;
+    if (!window.confirm('Are you sure you want to delete this message? Only you and administrators can perform this action.')) {
+      return;
+    }
+    try {
+      // 1. Delete locally from IndexedDB cache
+      await localDB.deleteLocalMessage(msgId);
+      
+      // 2. Delete remotely from Firestore
+      const msgRef = doc(db, 'conversations', activeConvId, 'messages', msgId);
+      await deleteDoc(msgRef);
+      
+      console.log(`[Chat] Deleted message: ${msgId}`);
+      // Optimistically filter the message from local state
+      setMessages(prev => prev.filter(m => m.id !== msgId));
+    } catch (err: any) {
+      console.error('[Chat] Failed to delete message:', err);
+      alert(`Could not delete message: ${err.message || 'Access Denied by rules.'}`);
+    }
+  };
 
   // --- Voice Note recording pipeline ---
   const startRecording = async () => {
@@ -678,6 +702,16 @@ export function ExpertChatView({ user }: ExpertChatViewProps) {
                               <CheckCheck className="w-3.5 h-3.5 text-primary shrink-0" />
                             )}
                           </div>
+                        )}
+                        {(isMe || user.role === 'admin') && (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteMessage(msg.id)}
+                            className="opacity-0 group-hover:opacity-100 p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-all cursor-pointer inline-flex items-center ml-1"
+                            title="Delete Message"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
                         )}
                       </div>
                     </div>

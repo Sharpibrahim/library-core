@@ -302,47 +302,68 @@ export function UploadSection({ user, onUploadComplete }: UploadSectionProps) {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 ml-1">Class / Level</label>
-                <select 
-                  value={formData.className}
-                  onChange={(e) => setFormData(prev => ({ ...prev, className: e.target.value }))}
-                  className="glass-input w-full px-5 py-4 appearance-none cursor-pointer bg-white text-slate-950 border border-slate-200 rounded-xl font-medium focus:outline-none focus:ring-2 focus:ring-primary/20"
-                >
-                  {CLASSES.map(c => (
-                    <option key={c} value={c} className="bg-white text-slate-950">{c}</option>
-                  ))}
-                </select>
+                <div className="relative">
+                  <select 
+                    value={formData.className}
+                    onChange={(e) => setFormData(prev => ({ ...prev, className: e.target.value }))}
+                    className="glass-input w-full px-5 py-4 pr-12 appearance-none cursor-pointer bg-white text-slate-950 border border-slate-200 rounded-xl font-medium focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  >
+                    {CLASSES.map(c => (
+                      <option key={c} value={c} className="bg-white text-slate-950">{c}</option>
+                    ))}
+                  </select>
+                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-slate-500">
+                    <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+                      <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/>
+                    </svg>
+                  </div>
+                </div>
               </div>
               <div className="space-y-2">
                 <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 ml-1">Subject</label>
-                <select 
-                  value={formData.subject}
-                  onChange={(e) => setFormData(prev => ({ ...prev, subject: e.target.value }))}
-                  className="glass-input w-full px-5 py-4 appearance-none cursor-pointer bg-white text-slate-950 border border-slate-200 rounded-xl font-medium focus:outline-none focus:ring-2 focus:ring-primary/20"
-                >
-                  {SUBJECTS.map(s => (
-                    <option key={s} value={s} className="bg-white text-slate-950">{s}</option>
-                  ))}
-                </select>
+                <div className="relative">
+                  <select 
+                    value={formData.subject}
+                    onChange={(e) => setFormData(prev => ({ ...prev, subject: e.target.value }))}
+                    className="glass-input w-full px-5 py-4 pr-12 appearance-none cursor-pointer bg-white text-slate-950 border border-slate-200 rounded-xl font-medium focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  >
+                    {SUBJECTS.map(s => (
+                      <option key={s} value={s} className="bg-white text-slate-950">{s}</option>
+                    ))}
+                  </select>
+                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-slate-500">
+                    <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+                      <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/>
+                    </svg>
+                  </div>
+                </div>
               </div>
             </div>
 
             <div className="space-y-2">
               <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 ml-1">Category</label>
-              <select 
-                value={formData.category}
-                onChange={(e) => setFormData(prev => ({ ...prev, category: e.target.value }))}
-                className="glass-input w-full px-5 py-4 appearance-none cursor-pointer bg-white text-slate-950 border border-slate-200 rounded-xl font-medium focus:outline-none focus:ring-2 focus:ring-primary/20"
-              >
-                <option value="book" className="bg-white text-slate-950">Core Textbook / Book</option>
-                <option value="pastpaper" className="bg-white text-slate-950">Past Paper / Exam</option>
-                <option value="note" className="bg-white text-slate-950">Expert Study Note</option>
-                <option value="syllabus" className="bg-white text-slate-950">Syllabus / Curriculum</option>
-                <option value="revision" className="bg-white text-slate-950">Revision Material</option>
-                <option value="video" className="bg-white text-slate-950">Expert Video Lesson</option>
-                <option value="subject" className="bg-white text-slate-950">Subject Overview</option>
-                <option value="Assignment" className="bg-white text-slate-950">Assignment</option>
-                <option value="interactive" className="bg-white text-slate-950">Simulation / Interactive Content</option>
-              </select>
+              <div className="relative">
+                <select 
+                  value={formData.category}
+                  onChange={(e) => setFormData(prev => ({ ...prev, category: e.target.value }))}
+                  className="glass-input w-full px-5 py-4 pr-12 appearance-none cursor-pointer bg-white text-slate-950 border border-slate-200 rounded-xl font-medium focus:outline-none focus:ring-2 focus:ring-primary/20"
+                >
+                  <option value="book" className="bg-white text-slate-950">Core Textbook / Book</option>
+                  <option value="pastpaper" className="bg-white text-slate-950">Past Paper / Exam</option>
+                  <option value="note" className="bg-white text-slate-950">Expert Study Note</option>
+                  <option value="syllabus" className="bg-white text-slate-950">Syllabus / Curriculum</option>
+                  <option value="revision" className="bg-white text-slate-950">Revision Material</option>
+                  <option value="video" className="bg-white text-slate-950">Expert Video Lesson</option>
+                  <option value="subject" className="bg-white text-slate-950">Subject Overview</option>
+                  <option value="Assignment" className="bg-white text-slate-950">Assignment</option>
+                  <option value="interactive" className="bg-white text-slate-950">Simulation / Interactive Content</option>
+                </select>
+                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-slate-500">
+                  <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+                    <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/>
+                  </svg>
+                </div>
+              </div>
             </div>
 
             <div className="space-y-2">

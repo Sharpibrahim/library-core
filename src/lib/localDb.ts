@@ -197,6 +197,15 @@ class LocalDB {
     });
   }
 
+  public async deleteLocalMessage(id: string): Promise<void> {
+    const store = await this.getStore('messages', 'readwrite');
+    return new Promise((resolve, reject) => {
+      const req = store.delete(id);
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+  }
+
   public async getLocalMessagesForConversation(convId: string): Promise<OfflineMessage[]> {
     const store = await this.getStore('messages', 'readonly');
     const index = store.index('conversationId');

@@ -13,6 +13,23 @@ interface ClassroomDetailProps {
   onBack: () => void;
 }
 
+const safeFormatDate = (dateVal: any, includeTime = false) => {
+  if (!dateVal) return '';
+  try {
+    let dStr = String(dateVal);
+    if (dStr.includes(' ') && !dStr.includes('T')) {
+      dStr = dStr.replace(' ', 'T');
+    }
+    const d = new Date(dStr);
+    if (isNaN(d.getTime())) return 'Recently';
+    return includeTime 
+      ? d.toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+      : d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  } catch (e) {
+    return 'Recently';
+  }
+};
+
 export function ClassroomDetail({ classId, user, onBack }: ClassroomDetailProps) {
   const [cls, setCls] = useState<Classroom | null>(null);
   const [activeTab, setActiveTab] = useState<'stream' | 'classwork' | 'people' | 'live'>('stream');
@@ -421,7 +438,7 @@ export function ClassroomDetail({ classId, user, onBack }: ClassroomDetailProps)
                                   <span className="uppercase text-[10px] font-black tracking-widest text-purple-600 bg-purple-50 px-2.5 py-1 rounded-md">{displayType}</span>
                                   {localAssignment?.due_date && (
                                      <span className="text-xs text-slate-500 flex items-center gap-1">
-                                        <Clock className="w-3.5 h-3.5" /> Due {new Date(localAssignment.due_date).toLocaleDateString()}
+                                        <Clock className="w-3.5 h-3.5" /> Due {safeFormatDate(localAssignment.due_date)}
                                      </span>
                                   )}
                                </div>
@@ -471,7 +488,7 @@ export function ClassroomDetail({ classId, user, onBack }: ClassroomDetailProps)
                      {mySubmission && (
                        <div className="bg-purple-50/50 border border-purple-100 rounded-2xl p-6 mb-6">
                           <div className="flex items-center justify-between mb-4">
-                             <span className="text-sm font-semibold text-slate-500">Already Submitted On {new Date(mySubmission.submitted_at).toLocaleString()}</span>
+                             <span className="text-sm font-semibold text-slate-500">Already Submitted On {safeFormatDate(mySubmission.submitted_at, true)}</span>
                              <span className={`px-3 py-1 text-xs font-bold rounded-full uppercase tracking-wider ${
                                 mySubmission.status === 'completed' 
                                   ? 'bg-green-100 text-green-700' 
@@ -596,7 +613,7 @@ export function ClassroomDetail({ classId, user, onBack }: ClassroomDetailProps)
                                  <div className="flex items-start justify-between mb-4">
                                     <div>
                                        <h4 className="font-bold text-gray-900 text-base">{sub.student_name || 'Class Student'}</h4>
-                                       <p className="text-xs text-slate-500">Submitted at {new Date(sub.submitted_at).toLocaleString()}</p>
+                                       <p className="text-xs text-slate-500">Submitted at {safeFormatDate(sub.submitted_at, true)}</p>
                                     </div>
                                     <span className={`px-2.5 py-1 text-xs font-bold rounded-full uppercase tracking-wider ${
                                        sub.status === 'completed' 
@@ -791,7 +808,7 @@ export function ClassroomDetail({ classId, user, onBack }: ClassroomDetailProps)
                            <img src={`https://api.dicebear.com/7.x/initials/svg?seed=${post.teacher_name}`} className="w-10 h-10 rounded-full bg-purple-50" />
                            <div>
                               <p className="font-bold text-gray-900">{post.teacher_name}</p>
-                              <p className="text-xs text-gray-500">{new Date(post.created_at).toLocaleDateString()}</p>
+                              <p className="text-xs text-gray-500">{safeFormatDate(post.created_at, true)}</p>
                            </div>
                         </div>
                         <p className="text-gray-800 whitespace-pre-wrap">{post.content}</p>
@@ -834,7 +851,7 @@ export function ClassroomDetail({ classId, user, onBack }: ClassroomDetailProps)
                                      <h3 className="font-bold text-gray-900 text-lg">{acc.title}</h3>
                                      <p className="text-sm text-gray-500 flex items-center gap-2 mt-1">
                                         <span className="uppercase text-[10px] font-black tracking-widest text-purple-600">{acc.assignment_type}</span>
-                                        {acc.due_date && <>• <span>Due {new Date(acc.due_date).toLocaleDateString()}</span></>}
+                                        {acc.due_date && <>• <span>Due {safeFormatDate(acc.due_date)}</span></>}
                                      </p>
                                   </div>
                                </div>
@@ -859,7 +876,7 @@ export function ClassroomDetail({ classId, user, onBack }: ClassroomDetailProps)
                                         <h3 className="font-bold text-gray-900 text-lg">{acc.title}</h3>
                                         <p className="text-sm text-gray-500 flex items-center gap-2 mt-1">
                                            <span className="uppercase text-[10px] font-black tracking-widest text-purple-600">{acc.assignment_type}</span>
-                                           {acc.due_date && <>• <span>Due {new Date(acc.due_date).toLocaleDateString()}</span></>}
+                                           {acc.due_date && <>• <span>Due {safeFormatDate(acc.due_date)}</span></>}
                                         </p>
                                      </div>
                                   </div>

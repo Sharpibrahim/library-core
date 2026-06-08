@@ -5,6 +5,7 @@ import fs from "fs";
 import cors from "cors";
 import Database from "better-sqlite3";
 import { Storage } from '@google-cloud/storage';
+import admin from "firebase-admin";
 
 // Handle ESM/CJS compatibility for better-sqlite3
 const BetterSqlite3 = (Database as any).default || Database;
@@ -112,22 +113,58 @@ function initDb() {
         role TEXT NOT NULL,
         favorite_subjects TEXT
       );
-      CREATE TABLE IF NOT EXISTS resources (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        title TEXT NOT NULL,
-        author TEXT NOT NULL,
-        type TEXT NOT NULL,
-        description TEXT,
-        file_url TEXT,
-        cover_url TEXT,
-        isbn TEXT,
-        genre TEXT,
-        publication_date TEXT,
-        unique_identifier TEXT,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        status TEXT DEFAULT 'available',
-        borrowed_by INTEGER
-      );
+    `);
+    
+    // Add columns dynamically if missing
+    try {
+      db.exec('ALTER TABLE users ADD COLUMN security_questions TEXT;');
+      console.log('[DATABASE] Column security_questions added successfully');
+    } catch (e) {
+      // Column already exists
+    }
+
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS resources (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          title TEXT NOT NULL,
+          author TEXT NOT NULL,
+          type TEXT NOT NULL,
+          description TEXT,
+          file_url TEXT,
+          cover_url TEXT,
+          isbn TEXT,
+          genre TEXT,
+          publication_date TEXT,
+          unique_identifier TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          status TEXT DEFAULT 'available',
+          borrowed_by INTEGER
+        );
+      `);
+    } catch (e) {
+      console.error('[DATABASE] Error creating resources table:', e);
+    }
+
+    // Initialize Firebase Admin SDK
+    if (admin.apps.length === 0) {
+      try {
+        const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
+        if (fs.existsSync(configPath)) {
+          const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+          admin.initializeApp({
+            projectId: config.projectId || config.projectCode
+          });
+        } else {
+          admin.initializeApp();
+        }
+        console.log('[FIREBASE ADMIN] Initialized Firebase Admin SDK successfully');
+      } catch (adminErr) {
+        console.error('[FIREBASE ADMIN] Initialization failed:', adminErr);
+      }
+    }
+
+    db.exec(`
       CREATE TABLE IF NOT EXISTS borrowed_items (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER,
@@ -874,6 +911,104 @@ app.post('/api/login', (req, res) => {
     res.json(user);
   } else {
     res.status(401).json({ error: 'Invalid credentials' });
+  }
+});
+
+app.post('/api/users/update-security-questions', (req, res) => {
+  try {
+    const { username, securityQuestions } = req.body;
+    if (!username || !Array.isArray(securityQuestions)) {
+      return res.status(400).json({ error: 'Username and securityQuestions list are required' });
+    }
+    const questionsJson = JSON.stringify(securityQuestions);
+    db.prepare('UPDATE users SET security_questions = ? WHERE username = ?').run(questionsJson, username);
+    console.log(`[SECURITY QUESTIONS] Saved questions for user ${username}`);
+    res.json({ success: true });
+  } catch (err: any) {
+    console.error('[SECURITY QUESTIONS] Failed to save questions:', err);
+    res.status(500).json({ error: 'Failed to update security questions' });
+  }
+});
+
+app.get('/api/auth/forgot-password-questions', (req, res) => {
+  try {
+    const { username } = req.query;
+    if (!username) {
+      return res.status(400).json({ error: 'Username is required' });
+    }
+    const user = db.prepare('SELECT security_questions FROM users WHERE username = ?').get(username) as any;
+    if (!user) {
+      return res.status(404).json({ error: 'Username not found. Please verify the spelling or register.' });
+    }
+    if (!user.security_questions) {
+      return res.status(400).json({ error: 'Security questions are not set up for this account yet. Please contact system admin.' });
+    }
+    const parsed = JSON.parse(user.security_questions);
+    if (!Array.isArray(parsed) || parsed.length < 3) {
+      return res.status(400).json({ error: 'Security questions are incomplete or invalid.' });
+    }
+    // Return questions only (omit standard answers for privacy!)
+    const questionsOnly = parsed.map(q => ({ q: q.q }));
+    res.json({ questions: questionsOnly });
+  } catch (err: any) {
+    console.error('[FORGOT PASSWORD] Fetch error:', err);
+    res.status(500).json({ error: 'Internal server error fetching questions' });
+  }
+});
+
+app.post('/api/auth/reset-password', async (req, res) => {
+  try {
+    const { username, answers, newPassword } = req.body;
+    if (!username || !Array.isArray(answers) || !newPassword) {
+      return res.status(400).json({ error: 'username, answers, and newPassword are required' });
+    }
+    
+    const user = db.prepare('SELECT id, uid, username, security_questions FROM users WHERE username = ?').get(username) as any;
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    if (!user.security_questions) {
+      return res.status(400).json({ error: 'No security questions set' });
+    }
+    
+    const parsedQuestions = JSON.parse(user.security_questions);
+    if (!Array.isArray(parsedQuestions) || parsedQuestions.length < 3) {
+      return res.status(400).json({ error: 'Security questions incomplete' });
+    }
+    
+    // Verify answers
+    let answersMatched = true;
+    for (let i = 0; i < parsedQuestions.length; i++) {
+      const storedAnswer = String(parsedQuestions[i].a || '').trim().toLowerCase();
+      const submittedAnswer = String(answers[i] || '').trim().toLowerCase();
+      if (storedAnswer !== submittedAnswer) {
+        answersMatched = false;
+        break;
+      }
+    }
+    
+    if (!answersMatched) {
+      return res.status(401).json({ error: 'Verification failed. Incorrect answers to security questions.' });
+    }
+    
+    // Correct answers! Let's update in local SQLite db
+    db.prepare('UPDATE users SET password = ? WHERE id = ?').run(newPassword, user.id);
+    console.log(`[PASSWORD RESET] Local password reset for user: ${username}`);
+    
+    // Try updating in Firebase Authentication if a uid is present
+    if (user.uid) {
+      try {
+        await admin.auth().updateUser(user.uid, { password: newPassword });
+        console.log(`[PASSWORD RESET] Firebase Auth password updated successfully for uid: ${user.uid}`);
+      } catch (firebaseErr: any) {
+        console.warn(`[PASSWORD RESET] Firebase Auth sync failed (user might be offline-only):`, firebaseErr.message);
+      }
+    }
+    
+    res.json({ success: true, message: 'Password has been successfully reset! You can now log in.' });
+  } catch (err: any) {
+    console.error('[PASSWORD RESET] Reset error:', err);
+    res.status(500).json({ error: 'Internal server error resetting password' });
   }
 });
 

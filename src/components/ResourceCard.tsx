@@ -77,7 +77,8 @@ export function ResourceCard({ resource, currentUser, onRead, onEdit, onDelete, 
     <motion.div 
       layout
       whileHover={{ y: -8 }}
-      className="bg-white border-t-4 border-primary rounded-[2rem] transition-all duration-300 shadow-sm hover:shadow-hover group relative overflow-hidden h-full flex flex-col"
+      onClick={() => onRead(resource)}
+      className="bg-white border-t-4 border-primary rounded-[2rem] transition-all duration-300 shadow-sm hover:shadow-hover group relative overflow-hidden h-full flex flex-col cursor-pointer"
     >
       <div className="p-6 relative z-10 flex flex-col h-full">
         {/* Top: Cover & Badge */}
@@ -173,7 +174,10 @@ export function ResourceCard({ resource, currentUser, onRead, onEdit, onDelete, 
             {(isAdmin || isTeacher || isOwner) && (
               <>
                 <button 
-                  onClick={() => onEdit?.(resource)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onEdit?.(resource);
+                  }}
                   className="p-2 text-text-muted hover:text-primary hover:bg-primary/5 rounded-lg transition-all"
                   title="Edit"
                 >
@@ -181,7 +185,10 @@ export function ResourceCard({ resource, currentUser, onRead, onEdit, onDelete, 
                 </button>
                 {(isAdmin || isOwner) && (
                   <button 
-                    onClick={() => setShowConfirm(true)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowConfirm(true);
+                    }}
                     className="p-2 text-text-muted hover:text-error hover:bg-error/10 rounded-lg transition-all"
                     title="Delete"
                   >
@@ -190,7 +197,12 @@ export function ResourceCard({ resource, currentUser, onRead, onEdit, onDelete, 
                 )}
               </>
             )}
-            <button className="p-2 text-text-muted hover:text-text-main hover:bg-hover rounded-lg transition-all">
+            <button 
+              onClick={(e) => {
+                e.stopPropagation();
+              }}
+              className="p-2 text-text-muted hover:text-text-main hover:bg-hover rounded-lg transition-all"
+            >
               <MoreVertical className="w-4 h-4" />
             </button>
           </div>
@@ -199,7 +211,10 @@ export function ResourceCard({ resource, currentUser, onRead, onEdit, onDelete, 
 
       {/* Embedded Sandbox-Friendly Delete Confirmation Overlay */}
       {showConfirm && (
-        <div className="absolute inset-0 bg-white/95 z-[50] rounded-[2rem] p-6 flex flex-col items-center justify-center text-center space-y-4 animate-in fade-in duration-200">
+        <div 
+          onClick={(e) => e.stopPropagation()}
+          className="absolute inset-0 bg-white/95 z-[50] rounded-[2rem] p-6 flex flex-col items-center justify-center text-center space-y-4 animate-in fade-in duration-200"
+        >
           <div className="w-14 h-14 bg-red-100 text-red-600 rounded-full flex items-center justify-center">
             <Trash2 className="w-7 h-7" />
           </div>
@@ -211,13 +226,17 @@ export function ResourceCard({ resource, currentUser, onRead, onEdit, onDelete, 
           </div>
           <div className="flex gap-2 w-full pt-2">
             <button
-              onClick={() => setShowConfirm(false)}
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowConfirm(false);
+              }}
               className="flex-1 py-3 rounded-xl bg-slate-100 text-slate-600 font-bold text-xs hover:bg-slate-200 transition-colors"
             >
               Cancel
             </button>
             <button
-              onClick={() => {
+              onClick={(e) => {
+                e.stopPropagation();
                 setShowConfirm(false);
                 onDelete?.(resource.id);
               }}

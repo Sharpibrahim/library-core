@@ -87,8 +87,14 @@ export function DashboardView({ user, resources, onRead, onUploadClick, onSettin
   const recentResources = resources.slice(0, 5);
   
   const getTimeAgo = (dateString: string) => {
-    const date = new Date(dateString);
+    if (!dateString) return 'Recently';
+    let dStr = String(dateString);
+    if (dStr.includes(' ') && !dStr.includes('T')) {
+      dStr = dStr.replace(' ', 'T');
+    }
+    const date = new Date(dStr);
     const now = new Date();
+    if (isNaN(date.getTime())) return 'Recently';
     const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
     if (diffInSeconds < 60) return 'Just now';
     if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;

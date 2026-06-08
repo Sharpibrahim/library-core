@@ -61,8 +61,14 @@ export function DashboardBottom({ user }: DashboardBottomProps) {
   };
 
   const getTimeAgo = (dateString: string) => {
-    const date = new Date(dateString);
+    if (!dateString) return 'Recently';
+    let dStr = String(dateString);
+    if (dStr.includes(' ') && !dStr.includes('T')) {
+      dStr = dStr.replace(' ', 'T');
+    }
+    const date = new Date(dStr);
     const now = new Date();
+    if (isNaN(date.getTime())) return 'Recently';
     const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
     
     if (diffInSeconds < 60) return 'Just now';

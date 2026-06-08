@@ -190,6 +190,7 @@ service cloud.firestore {
                          (request.auth.uid in conversationData().participants) && 
                          isValidMessage(incoming()) && 
                          (incoming().senderId == request.auth.uid || incoming().senderId in conversationData().participants);
+        allow delete: if isSignedIn() && (request.auth.uid in conversationData().participants) && (existing().senderId == request.auth.uid || isAdmin());
       }
     }
 

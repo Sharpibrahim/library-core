@@ -38,6 +38,17 @@ export function LoginForm({ onLogin, serverStatus }: LoginFormProps) {
   // Static list of popular user accounts to choose from for the elegant in-app Google Chooser
   const [googleAccounts, setGoogleAccounts] = useState<OfflineUser[]>([]);
 
+  // Forgot Password state
+  const [isForgotPassword, setIsForgotPassword] = useState(false);
+  const [forgotStep, setForgotStep] = useState(1); // 1 = input username, 2 = verify questions & reset
+  const [forgotUsername, setForgotUsername] = useState('');
+  const [forgotQuestions, setForgotQuestions] = useState<{ q: string }[]>([]);
+  const [forgotAnswers, setForgotAnswers] = useState<string[]>(['', '', '']);
+  const [newPassword, setNewPassword] = useState('');
+  const [forgotError, setForgotError] = useState('');
+  const [forgotSuccess, setForgotSuccess] = useState('');
+  const [isForgotLoading, setIsForgotLoading] = useState(false);
+
   useEffect(() => {
     // Load previously registered users to show in the Google Chooser
     const loadIndexedAccounts = async () => {
@@ -501,6 +512,86 @@ export function LoginForm({ onLogin, serverStatus }: LoginFormProps) {
     }
   };
 
+  const handleFetchQuestions = async () => {
+    if (!forgotUsername.trim()) {
+      setForgotError('Please enter your username');
+      return;
+    }
+    setIsForgotLoading(true);
+    setForgotError('');
+    try {
+      const res = await fetch(`/api/auth/forgot-password-questions?username=${encodeURIComponent(forgotUsername.trim())}`);
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to fetch security questions');
+      }
+      if (data.questions && Array.isArray(data.questions) && data.questions.length === 3) {
+        setForgotQuestions(data.questions);
+        setForgotAnswers(['', '', '']);
+        setForgotStep(2);
+      } else {
+        throw new Error('This user does not have exactly 3 security questions set up.');
+      }
+    } catch (err: any) {
+      console.error('[ForgotPwd] Questions fetch error:', err);
+      setForgotError(err.message || 'Error loading recovery questions.');
+    } finally {
+      setIsForgotLoading(false);
+    }
+  };
+
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (forgotAnswers.some(a => !a.trim())) {
+      setForgotError('Please answer all 3 security questions');
+      return;
+    }
+    if (!newPassword.trim()) {
+      setForgotError('Please enter your new password');
+      return;
+    }
+    if (newPassword.length < 6) {
+      setForgotError('Password must be at least 6 characters long');
+      return;
+    }
+    
+    setIsForgotLoading(true);
+    setForgotError('');
+    setForgotSuccess('');
+    try {
+      const res = await fetch('/api/auth/reset-password', {
+         method: 'POST',
+         headers: {
+           'Content-Type': 'application/json',
+         },
+         body: JSON.stringify({
+           username: forgotUsername.trim(),
+           answers: forgotAnswers,
+           newPassword: newPassword,
+         }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to reset password');
+      }
+      setForgotSuccess('Your password has been successfully reset! You can now sign in.');
+      setForgotStep(1);
+      setForgotUsername('');
+      setNewPassword('');
+      setForgotAnswers(['', '', '']);
+      // Go back to login after short delay
+      setTimeout(() => {
+        setIsForgotPassword(false);
+        setForgotSuccess('');
+      }, 3000);
+    } catch (err: any) {
+      console.error('[ForgotPwd] Reset error:', err);
+      setForgotError(err.message || 'Verification failed. Incorrect answers.');
+    } finally {
+      setIsForgotLoading(false);
+    }
+  };
+
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     if (password !== confirmPassword) {
@@ -784,6 +875,121 @@ export function LoginForm({ onLogin, serverStatus }: LoginFormProps) {
                   </form>
                 )}
               </div>
+            ) : isForgotPassword ? (
+              /* FORGOT PASSWORD LAYER */
+              <div className="animate-in fade-in">
+                <div className="mb-10 text-center lg:text-left">
+                  <h2 className="text-4xl font-display font-bold text-text-main mb-3">
+                    Forgot Password
+                  </h2>
+                  <p className="text-text-secondary text-sm font-medium">
+                    Recover your account by answering your set security questions.
+                  </p>
+                </div>
+
+                {forgotError && (
+                  <div className="bg-error/10 border border-error/20 text-error text-xs rounded-xl p-4 flex items-center gap-3 mb-5 animate-in fade-in">
+                    <div className="w-2 h-2 rounded-full bg-error" />
+                    <span className="font-bold tracking-wider">{forgotError}</span>
+                  </div>
+                )}
+
+                {forgotSuccess && (
+                  <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 text-xs rounded-xl p-4 flex items-center gap-3 mb-5 animate-in fade-in">
+                    <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <span className="font-bold tracking-wider">{forgotSuccess}</span>
+                  </div>
+                )}
+
+                {forgotStep === 1 ? (
+                  <div className="space-y-5">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted ml-0.5">Enter Username / Email</label>
+                      <div className="relative">
+                        <UserIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
+                        <input
+                          type="text"
+                          required
+                          value={forgotUsername}
+                          onChange={(e) => setForgotUsername(e.target.value)}
+                          className="block w-full pl-11 pr-4 py-3.5 bg-white border border-border rounded-2xl text-text-main placeholder-text-muted transition-all focus:ring-4 focus:ring-primary/10 focus:border-primary outline-none sm:text-sm font-medium"
+                          placeholder="username"
+                        />
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      disabled={isForgotLoading}
+                      onClick={handleFetchQuestions}
+                      className="w-full py-4 rounded-2xl bg-primary hover:bg-primary-hover text-white font-black text-xs uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-2"
+                    >
+                      {isForgotLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                      Retrieve Security Questions
+                    </button>
+                  </div>
+                ) : (
+                  <form className="space-y-5" onSubmit={handleResetPassword}>
+                    {forgotQuestions.map((question, idx) => (
+                      <div key={idx} className="space-y-2">
+                        <label className="block text-xs font-bold text-slate-700">
+                          {idx + 1}. {question.q}
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="Answer"
+                          value={forgotAnswers[idx]}
+                          onChange={(e) => {
+                            const newAnswers = [...forgotAnswers];
+                            newAnswers[idx] = e.target.value;
+                            setForgotAnswers(newAnswers);
+                          }}
+                          className="block w-full px-4 py-3 bg-white border border-border rounded-2xl text-text-main placeholder-text-muted focus:ring-4 focus:ring-primary/10 focus:border-primary outline-none sm:text-sm font-medium"
+                        />
+                      </div>
+                    ))}
+
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted ml-0.5">Enter New Password</label>
+                      <div className="relative">
+                        <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
+                        <input
+                          type="password"
+                          required
+                          value={newPassword}
+                          onChange={(e) => setNewPassword(e.target.value)}
+                          className="block w-full pl-11 pr-4 py-3.5 bg-white border border-border rounded-2xl text-text-main placeholder-text-muted transition-all focus:ring-4 focus:ring-primary/10 focus:border-primary outline-none sm:text-sm font-medium"
+                          placeholder="At least 6 characters"
+                        />
+                      </div>
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={isForgotLoading}
+                      className="w-full py-4 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-2 font-display cursor-pointer"
+                    >
+                      {isForgotLoading ? <Loader2 className="w-4 h-4 animate-spin animate-pulse" /> : null}
+                      Reset & Verify Password
+                    </button>
+                  </form>
+                )}
+
+                <div className="mt-8 text-center animate-pulse">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsForgotPassword(false);
+                      setForgotStep(1);
+                      setForgotError('');
+                    }}
+                    className="text-xs font-bold text-text-muted hover:text-text-main transition-colors uppercase tracking-widest cursor-pointer"
+                  >
+                    Back to Sign In
+                  </button>
+                </div>
+              </div>
             ) : (
               /* STANDARD EMAIL/PASSWORD LOGIN LAYER */
               <div className="animate-in fade-in">
@@ -845,12 +1051,17 @@ export function LoginForm({ onLogin, serverStatus }: LoginFormProps) {
                           <select
                             value={role}
                             onChange={(e) => setRole(e.target.value as Role)}
-                            className="block w-full pl-11 pr-4 py-3.5 bg-white border border-border rounded-2xl text-text-main transition-all focus:ring-4 focus:ring-primary/10 focus:border-primary outline-none sm:text-sm appearance-none cursor-pointer"
+                            className="block w-full pl-11 pr-12 py-3.5 bg-white border border-border rounded-2xl text-text-main transition-all focus:ring-4 focus:ring-primary/10 focus:border-primary outline-none sm:text-sm appearance-none cursor-pointer"
                             required
                           >
                             <option value="student" className="bg-white">Student</option>
                             <option value="teacher" className="bg-white">Teacher</option>
                           </select>
+                          <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-slate-500">
+                            <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+                              <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/>
+                            </svg>
+                          </div>
                         </div>
                       </div>
 
@@ -889,7 +1100,23 @@ export function LoginForm({ onLogin, serverStatus }: LoginFormProps) {
                   </div>
 
                   <div className="space-y-2">
-                    <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted ml-0.5">Password</label>
+                    <div className="flex justify-between items-center">
+                      <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted ml-0.5">Password</label>
+                      {!isSignup && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsForgotPassword(true);
+                            setForgotStep(1);
+                            setForgotError('');
+                            setForgotSuccess('');
+                          }}
+                          className="text-[10px] font-bold text-primary hover:text-primary-hover uppercase tracking-widest transition-colors cursor-pointer"
+                        >
+                          Forgot Password?
+                        </button>
+                      )}
+                    </div>
                     <div className="relative">
                       <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
                       <input
