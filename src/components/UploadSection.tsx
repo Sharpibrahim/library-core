@@ -17,18 +17,6 @@ export function UploadSection({ user, onUploadComplete }: UploadSectionProps) {
   const isAdmin = user.role === 'admin';
   const isTeacher = user.role === 'teacher';
 
-  if (!isAdmin && !isTeacher) {
-    return (
-      <div className="flex flex-col items-center justify-center py-20 text-center bg-white rounded-3xl border border-gray-100 p-8 shadow-sm">
-        <div className="w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center mb-6">
-          <X className="w-8 h-8" />
-        </div>
-        <h2 className="text-2xl font-display font-bold text-gray-900 mb-2">Access Restricted</h2>
-        <p className="text-gray-500 max-w-sm mx-auto font-medium">Only teachers and administrators can upload content to the library.</p>
-      </div>
-    );
-  }
-
   const [isUploading, setIsUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [dragActive, setDragActive] = useState(false);
@@ -40,7 +28,7 @@ export function UploadSection({ user, onUploadComplete }: UploadSectionProps) {
     className: user.class || 'S1',
     category: 'pastpaper',
     subject: 'Mathematics',
-    author: user.fullName || user.username,
+    author: user.fullName || user.username || 'Contributor',
     description: ''
   });
 
@@ -115,32 +103,65 @@ export function UploadSection({ user, onUploadComplete }: UploadSectionProps) {
         fileSize = file.size;
 
         if (isOnline) {
-          setProgress(20);
-          console.log('[UPLOAD] Uploading directly to Express container backend and permanent Cloud Storage...');
+          setProgress(10);
+          console.log('[UPLOAD] Starting client-side upload to Firebase Cloud Storage...');
           
-          const uploadFormData = new FormData();
-          uploadFormData.append('file', file);
-          uploadFormData.append('title', formData.title);
-          uploadFormData.append('author', formData.author);
-          uploadFormData.append('type', type);
-          uploadFormData.append('description', formData.description || '');
-          uploadFormData.append('cover_url', coverUrl);
-          uploadFormData.append('genre', formData.category);
+          // Generate a safe unique filename to avoid namespace collisions in GCS
+          const cleanFileName = `${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.]/g, '_')}`;
+          const storageRef = ref(storage, `resources/${user.uid || 'public'}/${cleanFileName}`);
+          
+          const uploadTask = uploadBytesResumable(storageRef, file);
 
-          const response = await fetch('/api/resources', {
-            method: 'POST',
-            body: uploadFormData
+          const cloudUrl = await new Promise<string>((resolve, reject) => {
+            uploadTask.on('state_changed', 
+              (snap) => {
+                const pct = Math.round((snap.bytesTransferred / snap.totalBytes) * 60) + 10;
+                setProgress(pct);
+              },
+              (err) => {
+                console.error('[UPLOAD] Firebase storage upload failed:', err);
+                reject(err);
+              },
+              async () => {
+                try {
+                  const url = await getDownloadURL(uploadTask.snapshot.ref);
+                  resolve(url);
+                } catch (urlErr) {
+                  reject(urlErr);
+                }
+              }
+            );
           });
 
-          if (!response.ok) {
-            const errText = await response.text();
-            throw new Error(`Server registration failed: ${errText}`);
-          }
-
+          console.log('[UPLOAD] Firebase Cloud Storage upload completed. URL:', cloudUrl);
+          fileUrl = cloudUrl;
           setProgress(75);
-          const result = await response.json();
-          fileUrl = result.file_url || null;
-          console.log(`[UPLOAD] Server-side registration successful. URL: ${fileUrl}`);
+
+          console.log('[UPLOAD] Propagating resource details to local SQLite database...');
+          const syncFormData = new FormData();
+          syncFormData.append('title', formData.title);
+          syncFormData.append('author', formData.author);
+          syncFormData.append('type', type);
+          syncFormData.append('description', formData.description || '');
+          syncFormData.append('cover_url', coverUrl);
+          syncFormData.append('genre', formData.category);
+          syncFormData.append('body_file_url', fileUrl);
+
+          try {
+            const response = await fetch('/api/resources', {
+              method: 'POST',
+              body: syncFormData
+            });
+
+            if (!response.ok) {
+              const errText = await response.text();
+              console.warn('[UPLOAD] Warning: SQLite sync failed, continuing with Firestore direct save:', errText);
+            } else {
+              console.log('[UPLOAD] Successfully synchronized with local SQLite DB.');
+            }
+          } catch (sqliteErr) {
+            console.error('[UPLOAD] Failed to synchronize with Express SQLite database server:', sqliteErr);
+          }
 
           setProgress(90);
           // Sync into Firestore for immediate client-side and collaborative stream updates
@@ -244,7 +265,7 @@ export function UploadSection({ user, onUploadComplete }: UploadSectionProps) {
           className: user.class || 'S1',
           category: 'pastpaper',
           subject: 'Mathematics',
-          author: user.fullName || user.username,
+          author: user.fullName || user.username || 'Contributor',
           description: ''
         });
         onUploadComplete();

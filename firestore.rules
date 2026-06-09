@@ -135,9 +135,9 @@ service cloud.firestore {
 
     match /resources/{resourceId} {
       allow get, list: if isSignedIn();
-      allow create: if isAdmin() || isTeacher();
-      allow update: if isAdmin() || isTeacher() || (isSignedIn() && existing().uploadedBy == request.auth.uid);
-      allow delete: if isAdmin() || (isSignedIn() && existing().uploadedBy == request.auth.uid);
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && (isAdmin() || isTeacher() || existing().uploadedBy == request.auth.uid);
+      allow delete: if isSignedIn() && (isAdmin() || isTeacher() || existing().uploadedBy == request.auth.uid);
     }
 
     match /study_sets/{setId} {

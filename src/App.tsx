@@ -502,12 +502,19 @@ export default function App() {
 
     fetchSqliteResources();
 
-    const q = query(collection(db, 'resources'), orderBy('createdAt', 'desc'));
+    const q = collection(db, 'resources');
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const firestoreResources: Resource[] = snapshot.docs.map(doc => ({
         ...doc.data(),
         id: doc.id
       } as Resource));
+
+      // Sort client-side by createdAt descending to eliminate Firestore multi-field index requirements
+      firestoreResources.sort((a, b) => {
+        const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return timeB - timeA;
+      });
       
       setResources(prev => {
         // We prioritize Firestore resources for real-time updates
